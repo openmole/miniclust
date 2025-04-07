@@ -40,6 +40,7 @@ object MiniClust:
     def statusDirectory = s"${jobDirectory}/status"
     def jobStatus(id: String) = s"${statusDirectory}/$id"
     def jobOutputDirectory(id: String) = s"${outputDirectory}/$id"
+    def jobOutputPath(id: String, name: String) = s"${outputDirectory}/$id/$name"
 
 
   def parseMessage(s: String) =

@@ -18,7 +18,8 @@ package miniclust.message
  */
 
 case class Account(bucket: String)
-case class InputFile(remote: String, local: String, cache: Option[String] = None)
+
+case class InputFile(remote: String, local: String, cacheKey: Option[String] = None)
 case class OutputFile(local: String, remote: String)
 
 object Message:

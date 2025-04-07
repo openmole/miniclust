@@ -25,6 +25,7 @@ import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
 
+import java.security.InvalidParameterException
 import scala.util.boundary
 import java.util.logging.{Level, Logger}
 
@@ -63,12 +64,24 @@ object Compute:
       r.inputFile.map: input =>
         Future:
           val local = jobDirectory(id) / input.local
-          input.cache match
+          input.cacheKey match
             case None => Minio.download(bucket, input.remote, local.toJava)
             case Some(l) =>
               val cached = FileCache.cached(fileCache, r.account, l)
               FileCache.use(cached): file =>
-                if !file.exists then Minio.download(bucket, input.remote, file.toJava)
+                if !file.exists
+                then
+                  val tmp = File.newTemporaryFile()
+                  Minio.download(bucket, input.remote, tmp.toJava)
+                  val hash = Tool.hashFile(tmp.toJava)
+
+                  if hash != l
+                  then
+                    tmp.delete(true)
+                    throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
+
+                  tmp.moveTo(file)
+
                 file.copyTo(local)
       .awaitAll
 

@@ -8,25 +8,6 @@ ThisBuild / scalacOptions := Seq("-Xmax-inlines:100")
 ThisBuild / scalaVersion := scala3Version
 
 
-ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))
-ThisBuild / homepage := Some(url("https://github.com/openmole/gridscale"))
-
-ThisBuild / publishTo := sonatypePublishToBundle.value
-
-ThisBuild / pomIncludeRepository := { _ => false}
-ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/openmole/gridscale.git"), "scm:git:git@github.com:openmole/gridscale.git"))
-
-ThisBuild / pomExtra := {
-  <!-- Developer contact information -->
-    <developers>
-      <developer>
-        <id>romainreuillon</id>
-        <name>Romain Reuillon</name>
-        <url>https://github.com/romainreuillon/</url>
-      </developer>
-    </developers>
-}
-
 
 def circeVersion = "0.14.12"
 
@@ -57,6 +38,7 @@ lazy val message = project
   .settings(
     name := "message",
     libraryDependencies += "io.minio" % "minio" % "8.5.17",
+    libraryDependencies += "commons-codec" % "commons-codec" % "1.18.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
@@ -96,13 +78,32 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 )
 
 
+ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))
+ThisBuild / homepage := Some(url("https://github.com/openmole/miniclust"))
+
+ThisBuild / publishTo := sonatypePublishToBundle.value
+
+ThisBuild / pomIncludeRepository := { _ => false}
+ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/openmole/miniclust.git"), "scm:git:git@github.com:openmole/miniclust.git"))
+
+ThisBuild / pomExtra := {
+  <!-- Developer contact information -->
+    <developers>
+      <developer>
+        <id>romainreuillon</id>
+        <name>Romain Reuillon</name>
+        <url>https://github.com/romainreuillon/</url>
+      </developer>
+    </developers>
+}
+
+ThisBuild / sonatypeProfileName := "org.openmole"
+
+import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations.*
+
 releaseVersionBump := sbtrelease.Version.Bump.Minor
 releaseTagComment    := s"Releasing ${(ThisBuild / version).value}"
 releaseCommitMessage := s"Bump version to ${(ThisBuild / version).value}"
-sonatypeProfileName := "org.openmole"
-
-
-import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations.*
 
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,

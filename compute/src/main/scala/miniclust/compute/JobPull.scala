@@ -159,25 +159,25 @@ object JobPull:
 
     job match
       case Some(job) =>
-        logger.info(s"found ${job.id}")
-        validate(job) match
-          case Failure(exception) =>
-            logger.info(s"${job.id}: failed to validate, ${exception.getMessage}")
-            Minio.upload(job.bucket, MiniClust.generateMessage(Message.Failed(job.id, exception.getMessage, Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-            Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
-            pull(server, coordinationBucket)
-          case Success(run) =>
-            if checkIn(coordinationBucket, job)
-            then
-              if !canceled(job.bucket, job.id)
-              then
+        if checkIn(coordinationBucket, job)
+        then
+          logger.info(s"${job.id}: checked in")
+          if !canceled(job.bucket, job.id)
+          then
+            validate(job) match
+              case Failure(exception) =>
+                logger.info(s"${job.id}: failed to validate, ${exception.getMessage}")
+                Minio.upload(job.bucket, MiniClust.generateMessage(Message.Failed(job.id, exception.getMessage, Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+                Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
+                pull(server, coordinationBucket)
+              case Success(run) =>
                 Minio.upload(job.bucket, MiniClust.generateMessage(Message.Running(job.id)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
                 Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
                 (job, run)
-              else
-                Minio.upload(job.bucket, MiniClust.generateMessage(Message.Canceled(job.id, true)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-                pull(server, coordinationBucket)
-            else pull(server, coordinationBucket)
+          else
+            Minio.upload(job.bucket, MiniClust.generateMessage(Message.Canceled(job.id, true)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+            pull(server, coordinationBucket)
+        else pull(server, coordinationBucket)
       case None =>
         Thread.sleep(2000)
         pull(server, coordinationBucket)

@@ -17,13 +17,27 @@ package miniclust.message
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import org.apache.commons.codec.digest.*
+import java.io.*
+
 object Tool:
 
   def hashString(input: String): String =
-    import java.security.MessageDigest
     import java.nio.charset.StandardCharsets
-    import java.math.BigInteger
-
-    val digest = MessageDigest.getInstance("SHA-256")
-    val hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8))
+    val hashBytes =Blake3.hash(input.getBytes(StandardCharsets.UTF_8))
     hashBytes.map("%02x".format(_)).mkString
+
+  def hashFile(input: File): String =
+    val hasher = Blake3.initHash()
+    val buffer = Array.ofDim[Byte](64 * 1024 * 1024)
+    val is = FileInputStream(input)
+    try
+      var bytesRead = 0
+      while
+        bytesRead = is.read(buffer)
+        bytesRead != -1
+      do hasher.update(buffer, 0, bytesRead)
+    finally is.close()
+
+    val hash = hasher.doFinalize(32)
+    s"blake3:${hash.map("%02x".format(_)).mkString}"

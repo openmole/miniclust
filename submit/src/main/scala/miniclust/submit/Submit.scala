@@ -1,5 +1,6 @@
 package miniclust.submit
 
+import io.minio.messages.Status
 import miniclust.message.*
 
 /*
@@ -28,23 +29,45 @@ import scala.concurrent.duration.*
 
   val bucket = Minio.userBucket(server, user).get
 
+  val testFile = new java.io.File("/tmp/test.txt")
+  val writer = new java.io.PrintWriter(testFile)
+  writer.write("youpi")
+  writer.close()
+
+  Minio.upload(bucket, testFile, "test.txt")
+
   val run =
     Message.Submitted(
       Account(bucket.name),
-      "sleep 30",
-     // inputFile = Seq(InputFile("test.txt", "test.txt", Some("test"))),
+      "hostname",
+      inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
       outputFile = Seq(OutputFile("output.txt", "output.txt")),
       stdOut = Some("output.txt")
     )
 
-  val futs = Future.sequence:
-    for
-      i <- 0 to 100
-    yield
-      Future:
-        submit(bucket, run.copy(noise = s"$i"))
+  val id = submit(bucket, run)
 
-  Await.result(futs, Duration.Inf)
+
+  var s: Message = run
+  while
+    s = status(bucket, id)
+    !s.finished
+  do
+    println(s)
+    Thread.sleep(1000)
+
+  println(s)
+  println(Minio.content(bucket, MiniClust.User.jobOutputPath(id, "output.txt")))
+
+//
+//  val futs = Future.sequence:
+//    for
+//      i <- 0 to 1
+//    yield
+//      Future:
+//        submit(bucket, run.copy(noise = s"$i"))
+//
+//  Await.result(futs, Duration.Inf)
 
 
 

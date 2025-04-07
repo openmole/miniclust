@@ -1,0 +1,121 @@
+import com.typesafe.sbt.packager.docker.*
+
+val scala3Version = "3.3.5"
+
+ThisBuild / version := "1.0-SNAPSHOT"
+ThisBuild / organization := "miniclust"
+ThisBuild / scalacOptions := Seq("-Xmax-inlines:100")
+ThisBuild / scalaVersion := scala3Version
+
+
+ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))
+ThisBuild / homepage := Some(url("https://github.com/openmole/gridscale"))
+
+ThisBuild / publishTo := sonatypePublishToBundle.value
+
+ThisBuild / pomIncludeRepository := { _ => false}
+ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/openmole/gridscale.git"), "scm:git:git@github.com:openmole/gridscale.git"))
+
+ThisBuild / pomExtra := {
+  <!-- Developer contact information -->
+    <developers>
+      <developer>
+        <id>romainreuillon</id>
+        <name>Romain Reuillon</name>
+        <url>https://github.com/romainreuillon/</url>
+      </developer>
+    </developers>
+}
+
+
+def circeVersion = "0.14.12"
+
+
+lazy val submit = project
+  .in(file("submit"))
+  .settings(
+      name := "submit",
+      libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
+  )
+  .dependsOn(message)
+
+
+lazy val compute = project
+  .in(file("compute"))
+  .settings(
+    name := "compute",
+    libraryDependencies += "com.github.pathikrit" %% "better-files" % "3.9.2",
+    libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.0",
+    libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
+    libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
+  )
+  .dependsOn(message)
+
+
+lazy val message = project
+  .in(file("message"))
+  .settings(
+    name := "message",
+    libraryDependencies += "io.minio" % "minio" % "8.5.17",
+    libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
+    libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
+    libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
+  )
+
+//val prefix = "/opt/docker/application/"
+lazy val application = project.in(file("application")) dependsOn(compute) enablePlugins (JavaServerAppPackaging) settings(
+  //  daemonUserUid in Docker := None,
+  //  daemonUser in Docker    := "openmoleconnect",
+  //  dockerChmodType := DockerChmodType.UserGroupWriteExecute,
+  //  dockerAdditionalPermissions += (DockerChmodType.UserGroupPlusExecute, "/opt/docker/bin/application"),
+  //  dockerAdditionalPermissions += (DockerChmodType.UserGroupWriteExecute, "/home/demiourgos728/.openmole-connect"),
+  //libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0",
+//  Docker / mappings ++=
+//    Seq(
+//      (dependencyFile in client in Compile).value -> s"$prefix/webapp/js/connect-deps.js",
+//      (fullOptJS in client in Compile).value.data -> s"$prefix/webapp/js/connect.js"
+//    ) ++ doMapping((resourceDirectory in client in Compile).value, prefix)
+//      ++ doMapping((cssFile in client in target).value, s"$prefix/webapp/css/")
+//      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
+
+
+  dockerCommands := dockerCommands.value.take(1) ++ Seq(
+    Cmd("RUN",
+      """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
+        |apt-get update && \
+        |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales && \
+        |apt-get install -y singularity-container && \
+        |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
+        |mkdir -p /lib/modules && \
+        |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf
+        |""".stripMargin)
+  ) ++ dockerCommands.value.drop(1),
+  Docker / packageName := "openmole/miniclust",
+  Docker / organization := "openmole",
+  dockerBaseImage := "openjdk:24-slim"
+)
+
+
+releaseVersionBump := sbtrelease.Version.Bump.Minor
+releaseTagComment    := s"Releasing ${(ThisBuild / version).value}"
+releaseCommitMessage := s"Bump version to ${(ThisBuild / version).value}"
+sonatypeProfileName := "org.openmole"
+
+
+import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations.*
+
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  tagRelease,
+  releaseStepCommandAndRemaining("+publishSigned"),
+  releaseStepCommand("sonatypeBundleRelease"),
+  setNextVersion,
+  commitNextVersion,
+  //releaseStepCommand("sonatypeReleaseAll"),
+  pushChanges
+)
+

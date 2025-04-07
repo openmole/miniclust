@@ -95,7 +95,6 @@ object Compute:
         .awaitAll
     finally jobDirectory(id).delete()
 
-
   def run(
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob,
@@ -134,7 +133,14 @@ object Compute:
           )
 
           logger.info(s"${job.id}: run ${r.command}")
-          val process = Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
+
+          val process =
+            try Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
+            catch
+              case e: Exception =>
+                logger.info(s"${job.id}: error launching job execution $e")
+                boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
+
           processDestroyer.add(process)
 
           while process.isAlive()

@@ -39,7 +39,7 @@ import scala.concurrent.duration.*
   val run =
     Message.Submitted(
       Account(bucket.name),
-      "hostname",
+      "singularity help",
       inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
       outputFile = Seq(OutputFile("output.txt", "output.txt")),
       stdOut = Some("output.txt")

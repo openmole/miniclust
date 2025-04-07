@@ -61,17 +61,24 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 //      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
 
 
-  dockerCommands := dockerCommands.value.take(1) ++ Seq(
-    Cmd("RUN",
-      """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
-        |apt-get update && \
-        |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales && \
-        |apt-get install -y singularity-container && \
-        |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
-        |mkdir -p /lib/modules && \
-        |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf
-        |""".stripMargin)
-  ) ++ dockerCommands.value.drop(1),
+  dockerCommands :=
+    {
+      import com.typesafe.sbt.packager.docker.*
+      val dockerCommandsValue = dockerCommands.value
+
+      val executionStageOffset = dockerCommandsValue.indexWhere(_ == DockerStageBreak) + 3
+      dockerCommands.value.take(executionStageOffset) ++ Seq(
+      Cmd("RUN",
+        """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
+          |apt-get update && \
+          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales && \
+          |apt-get install -y singularity-container && \
+          |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
+          |mkdir -p /lib/modules && \
+          |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf
+          |""".stripMargin)
+      ) ++ dockerCommands.value.drop(executionStageOffset)
+  },
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerBaseImage := "openjdk:24-slim"

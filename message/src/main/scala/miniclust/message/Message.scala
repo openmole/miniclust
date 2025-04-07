@@ -39,7 +39,7 @@ object Message:
 
   object Failed:
     enum Reason:
-      case Abandoned, Invalid, PreparationFailed
+      case Abandoned, Invalid, PreparationFailed, ExecutionFailed
 
   case class Submitted(
     account: Account,

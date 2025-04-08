@@ -107,7 +107,8 @@ object Minio:
       c.listBuckets().asScala.filter: bucket =>
         val tags = c.getBucketTags(GetBucketTagsArgs.builder().bucket(bucket.name()).build()).get
         tags.asScala.toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
-      .map(b => Bucket(server, b.name())).headOption
+      .map(b => Bucket(server, b.name())).headOption.getOrElse:
+        throw java.util.NoSuchElementException(s"Cannot get or create a bucket for user ${login}, tagged with tag ${MiniClust.User.submitBucketTag}")
 
   def listUserBuckets(server: Server): Seq[Bucket] =
     withClient(server): c =>
@@ -122,6 +123,11 @@ object Minio:
   def delete(bucket: Bucket, path: String*): Unit =
     withClient(bucket.server): c =>
       val objects = path.map(p => io.minio.messages.DeleteObject(p))
+      c.removeObjects(RemoveObjectsArgs.builder().bucket(bucket.name).objects(objects.asJava).build()).asScala.toSeq
+
+  def deleteRecursive(bucket: Bucket, path: String): Unit =
+    withClient(bucket.server): c =>
+      val objects = listObjects(bucket, path, recursive = true).map(o => io.minio.messages.DeleteObject(o.objectName()))
       c.removeObjects(RemoveObjectsArgs.builder().bucket(bucket.name).objects(objects.asJava).build()).asScala.toSeq
 
   def download(bucket: Bucket, path: String, local: File) =

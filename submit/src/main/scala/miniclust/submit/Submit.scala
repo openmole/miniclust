@@ -27,7 +27,7 @@ import scala.concurrent.duration.*
 @main def run(url: String, user: String, password: String) =
   val server = Minio.Server(url, user, password, insecure = true)
 
-  val bucket = Minio.userBucket(server, user).get
+  val bucket = Minio.userBucket(server, user)
 
   val testFile = new java.io.File("/tmp/test.txt")
   val writer = new java.io.PrintWriter(testFile)
@@ -98,3 +98,4 @@ def cancel(bucket: Minio.Bucket, id: String) =
 
 def clean(bucket: Minio.Bucket, id: String) =
   Minio.delete(bucket, MiniClust.User.submittedJob(id), MiniClust.User.jobStatus(id))
+  Minio.deleteRecursive(bucket, MiniClust.User.jobOutputDirectory(id))

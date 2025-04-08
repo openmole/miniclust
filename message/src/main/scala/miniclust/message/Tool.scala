@@ -24,7 +24,7 @@ object Tool:
 
   def hashString(input: String): String =
     import java.nio.charset.StandardCharsets
-    val hashBytes =Blake3.hash(input.getBytes(StandardCharsets.UTF_8))
+    val hashBytes = Blake3.hash(input.getBytes(StandardCharsets.UTF_8))
     s"blake3:${hashBytes.map("%02x".format(_)).mkString}"
 
   def hashFile(input: File): String =

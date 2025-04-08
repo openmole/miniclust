@@ -42,12 +42,12 @@ object JobPull:
 
     def name(j: SubmittedJob | RunningJob) =
       j match
-        case j: SubmittedJob => s"${j.id}-${j.bucket.name}"
-        case j: RunningJob => s"${j.id}-${j.bucketName}"
+        case j: SubmittedJob => s"${j.bucket.name}-${j.id}"
+        case j: RunningJob => s"${j.bucketName}-${j.id}"
 
     def parse(name: String, ping: Long): RunningJob =
       val index = name.indexOf('-')
-      RunningJob(id = name.take(index), bucketName = name.drop(index + 1), ping = ping)
+      RunningJob(bucketName = name.take(index), id = name.drop(index + 1), ping = ping)
 
   case class RunningJob(bucketName: String, id: String, ping: Long)
 

@@ -3,11 +3,9 @@ import com.typesafe.sbt.packager.docker.*
 val scala3Version = "3.3.5"
 
 ThisBuild / version := "1.0-SNAPSHOT"
-ThisBuild / organization := "miniclust"
+ThisBuild / organization := "org.openmole.miniclust"
 ThisBuild / scalacOptions := Seq("-Xmax-inlines:100")
 ThisBuild / scalaVersion := scala3Version
-
-
 
 def circeVersion = "0.14.12"
 

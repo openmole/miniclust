@@ -57,9 +57,6 @@ object Compute:
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id
 
   def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Unit =
-    jobDirectory(id).delete(true)
-    jobDirectory(id).createDirectories()
-
     Async.blocking:
       r.inputFile.map: input =>
         Future:
@@ -85,79 +82,111 @@ object Compute:
                 file.copyTo(local)
       .awaitAll
 
-  def complete(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig): Unit =
-    try
-      Async.blocking:
-        r.outputFile.map: output =>
-          Future:
-            val local = jobDirectory(id) / output.local
-            Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
-        .awaitAll
-    finally jobDirectory(id).delete()
+
+  def uploadOutput(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
+    (r.stdOut ++ r.stdErr).foreach: o =>
+      Future:
+        val local = jobDirectory(id) / o
+        if !local.exists
+        then throw new InvalidParameterException(s"Output file $o does not exist")
+        Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
+
+  def uploadOutputFiles(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
+    r.outputFile.foreach: output =>
+      Future:
+        val local = jobDirectory(id) / output.local
+        if !local.exists
+        then throw new InvalidParameterException(s"Output file ${output.local} does not exist")
+        Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
+
+  def createJobDirectory(id: String)(using config: ComputeConfig) =
+    jobDirectory(id).delete(true)
+    jobDirectory(id).createDirectories()
+
+  def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
 
   def run(
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob,
     r: Message.Submitted)(using config: ComputeConfig, fileCache: FileCache) =
-    import scala.sys.process.*
+    createJobDirectory(job.id)
 
-    boundary[Message]:
-      logger.info(s"${job.id}: preparing files")
+    try
+      import scala.sys.process.*
 
-      def testCanceled(): Unit =
-        if JobPull.canceled(job.bucket, job.id)
-        then boundary.break(Message.Canceled(job.id, true))
+      boundary[Message]:
+        logger.info(s"${job.id}: preparing files")
 
-      testCanceled()
+        def testCanceled(): Unit =
+          if JobPull.canceled(job.bucket, job.id)
+          then boundary.break(Message.Canceled(job.id, true))
 
-      try prepare(job.bucket, r, job.id)
-      catch
-         case e: Exception =>
-           logger.info(s"${job.id}: error preparing files $e")
-           boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
+        testCanceled()
 
-      testCanceled()
+        try prepare(job.bucket, r, job.id)
+        catch
+           case e: Exception =>
+             logger.info(s"${job.id}: error preparing files $e")
+             boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
 
-      val outputWriter = r.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
-      val errorWriter = r.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+        testCanceled()
 
-      val exit =
+        val outputWriter = r.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+        val errorWriter = r.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+
+        val exit =
+          try
+            val processLogger = ProcessLogger(
+              line => outputWriter match
+                case Some(writer) => writer.println(line)
+                case None => println(line),
+              line => errorWriter match
+                case Some(writer) => writer.println(line)
+                case None => System.err.println(line)
+            )
+
+            logger.info(s"${job.id}: run ${r.command}")
+
+            val process =
+              try Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
+              catch
+                case e: Exception =>
+                  logger.info(s"${job.id}: error launching job execution $e")
+                  boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
+
+            processDestroyer.add(process)
+
+            while process.isAlive()
+            do
+              testCanceled()
+              Thread.sleep(5000)
+
+            try process.exitValue()
+            finally processDestroyer.remove(process)
+          finally
+            outputWriter.foreach(_.close())
+            errorWriter.foreach(_.close())
+
+        logger.info(s"${job.id}: complete job")
+
+        testCanceled()
+
+        if exit != 0
+        then
+          Async.blocking:
+            uploadOutput(job.bucket, r, job.id)
+
+          boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
+
         try
-          val processLogger = ProcessLogger(
-            line => outputWriter match
-              case Some(writer) => writer.println(line)
-              case None => println(line),
-            line => errorWriter match
-              case Some(writer) => writer.println(line)
-              case None => System.err.println(line)
-          )
+          Async.blocking:
+            uploadOutput(job.bucket, r, job.id)
+            uploadOutputFiles(job.bucket, r, job.id)
 
-          logger.info(s"${job.id}: run ${r.command}")
+        catch
+          case e: Exception =>
+            logger.info(s"${job.id}: error completing the job $e")
+            boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.CompletionFailed))
 
-          val process =
-            try Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
-            catch
-              case e: Exception =>
-                logger.info(s"${job.id}: error launching job execution $e")
-                boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
-
-          processDestroyer.add(process)
-
-          while process.isAlive()
-          do
-            testCanceled()
-            Thread.sleep(5000)
-
-          try process.exitValue()
-          finally processDestroyer.remove(process)
-        finally
-          outputWriter.foreach(_.close())
-          errorWriter.foreach(_.close())
-
-      logger.info(s"${job.id}: complete job")
-
-      testCanceled()
-
-      complete(job.bucket, r, job.id)
-      Message.Completed(job.id, exit)
-
+        Message.Completed(job.id)
+      finally cleanJobDirectory(job.id)

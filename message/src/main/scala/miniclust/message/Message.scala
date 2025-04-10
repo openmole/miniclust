@@ -39,7 +39,7 @@ object Message:
 
   object Failed:
     enum Reason:
-      case Abandoned, Invalid, PreparationFailed, ExecutionFailed
+      case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed
 
   case class Submitted(
     account: Account,
@@ -51,7 +51,7 @@ object Message:
     noise: String = "") extends Message
 
   case class Failed(id: String, message: String, reason: Failed.Reason) extends Message
-  case class Completed(id: String, exit: Int) extends Message
+  case class Completed(id: String) extends Message
   case class Running(id: String) extends Message
   case class Canceled(id: String, canceled: Boolean = false) extends Message
 

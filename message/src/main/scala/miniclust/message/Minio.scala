@@ -135,6 +135,7 @@ object Minio:
       try
         val stream = c.getObject(GetObjectArgs.builder().bucket(bucket.name).`object`(path).build())
         try
+          local.getParentFile.mkdirs()
           val fos = new FileOutputStream(local)
           try stream.transferTo(fos)
           finally fos.close()
@@ -188,6 +189,16 @@ object Minio:
         ListObjectsArgs.builder().bucket(bucket.name).prefix(prefix).recursive(recursive).build()
       ).asScala.toSeq.map: i =>
         i.get()
+
+  def exists(bucket: Bucket, prefix: String) =
+    withClient(bucket.server): c =>
+      try
+        c.statObject(
+          StatObjectArgs.builder().bucket(bucket.name).`object`(prefix).build()
+        )
+        true
+      catch
+        case e: ErrorResponseException if e.errorResponse().code() == "NoSuchKey" => false
 
   def date(server: Server) =
     val client = httpClient(server)

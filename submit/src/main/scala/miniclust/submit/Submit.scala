@@ -41,7 +41,6 @@ import scala.concurrent.duration.*
       Account(bucket.name),
       "singularity help",
       inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
-      outputFile = Seq(OutputFile("output.txt", "output.txt")),
       stdOut = Some("output.txt")
     )
 
@@ -97,5 +96,4 @@ def cancel(bucket: Minio.Bucket, id: String) =
   Minio.upload(bucket, MiniClust.generateMessage(Message.Canceled(id)), MiniClust.User.jobStatus(id), contentType = Some(Minio.jsonContentType))
 
 def clean(bucket: Minio.Bucket, id: String) =
-  Minio.delete(bucket, MiniClust.User.submittedJob(id), MiniClust.User.jobStatus(id))
   Minio.deleteRecursive(bucket, MiniClust.User.jobOutputDirectory(id))

@@ -5,7 +5,10 @@ import gears.async.default.given
 import gears.async.*
 import miniclust.compute.{Compute, Configuration, FileCache, JobPull}
 import miniclust.message.{MiniClust, Minio}
+
+import java.util.UUID
 import java.util.logging.*
+import scala.util.hashing.MurmurHash3
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -34,7 +37,7 @@ import java.util.logging.*
 
   val server = Minio.Server(configuration.minio.url, configuration.minio.user, configuration.minio.password, insecure = configuration.minio.insecure)
   val coordinationBucket = Minio.bucket(server, MiniClust.Coordination.bucketName)
-
+  val seed = UUID.randomUUID().hashCode()
 
   Async.blocking:
     (0 until Runtime.getRuntime.availableProcessors()).map: i =>
@@ -44,7 +47,7 @@ import java.util.logging.*
           cache = configuration.compute.cache
         )
 
-      given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(i))
+      given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i))
       runWorker(server, coordinationBucket)
     .awaitAll
 

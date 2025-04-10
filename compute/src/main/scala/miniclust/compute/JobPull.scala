@@ -6,7 +6,10 @@ import java.io.FileNotFoundException
 import java.time.{Duration, ZonedDateTime}
 import java.util.concurrent.Executors
 import scala.util.*
-import javax.swing.plaf.ButtonUI
+
+import gears.async.*
+import gears.async.default.given
+
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -33,7 +36,7 @@ object JobPull:
 
   val virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()
 
-  case class JobPullConfig(random: util.Random)
+  case class JobPullConfig(random: util.Random, cleanFrequency: Double = 0.001, oldData: Long = 7 * 60 * 60 * 24)
   case class SubmittedJob(bucket: Bucket, id: String)
 
   object RunningJob:
@@ -153,7 +156,17 @@ object JobPull:
     then logger.info(s"Removed jobs without heartbeat: ${oldJobs}")
 
 
-  def pull(server: Minio.Server, coordinationBucket: Bucket)(using JobPullConfig): (SubmittedJob, Message.Submitted) =
+  def removeOldData(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig) =
+    val date = Minio.date(coordinationBucket.server)
+    def tooOld(d: Long) = (date - d) > config.oldData
+
+    config.random.shuffle(Minio.listUserBuckets(server)).take(1).foreach: b =>
+      val oldStatus = Minio.listObjects(b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
+      val oldOutputs = Minio.listObjects(b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
+      Minio.delete(b, (oldStatus ++ oldOutputs).map(_.objectName())*)
+
+  def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): (SubmittedJob, Message.Submitted) =
+    if config.random.nextDouble() < config.cleanFrequency then removeOldData(server, coordinationBucket)
     removeAbandonedJobs(server, coordinationBucket)
     val job = selectJob(server, coordinationBucket)
 

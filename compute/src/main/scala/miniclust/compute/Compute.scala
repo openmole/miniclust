@@ -28,7 +28,7 @@ import miniclust.compute.JobPull.SubmittedJob
 import java.security.InvalidParameterException
 import scala.util.boundary
 import java.util.logging.{Level, Logger}
-
+import java.nio.file.Files
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
@@ -54,7 +54,7 @@ object Compute:
     JobPull.checkOut(coordinationBucket, job)
 
 
-  def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id
+  def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
   def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Unit =
     Async.blocking:
@@ -79,7 +79,7 @@ object Compute:
 
                   tmp.moveTo(file)
 
-                file.copyTo(local)
+                Files.createLink(local.toJava.toPath, file.toJava.toPath)
       .awaitAll
 
 

@@ -155,7 +155,7 @@ object Compute:
                   case None => Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
                   case Some(sudo) =>
                     (
-                      Process(s"sudo chown ${sudo} -R ${jobDirectory(job.id)}") #&&
+                      Process(s"sudo chown -R ${sudo} ${jobDirectory(job.id)}") #&&
                       Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava)
                     ).run(processLogger)
               catch

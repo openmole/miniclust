@@ -34,7 +34,8 @@ object Configuration:
 
   case class Compute(
     workDirectory: String,
-    cache: Int)
+    cache: Int,
+    sudo: Option[String])
 
 case class Configuration(
   minio: Configuration.Minio,

@@ -33,6 +33,14 @@ object FileCache:
     folder.createDirectories()
     new FileCache(folder, maxSize)
 
+  private def removeOldFiles(cache: FileCache): Unit =
+    val dateLimit = System.currentTimeMillis() - 7 * 1000 * 60 * 60 * 24
+
+    cache.folder.list.map(_.toJava).toSeq
+      .filter(_.isFile)
+      .sortBy(_.lastModified() < dateLimit).foreach: f =>
+        f.delete()
+
   private def enforceSizeLimit(cache: FileCache): Unit =
     val files =
       cache.folder.list.map(_.toJava).toSeq

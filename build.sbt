@@ -58,7 +58,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 //      ++ doMapping((cssFile in client in target).value, s"$prefix/webapp/css/")
 //      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
 
-
+  Docker / daemonUser := "miniclust",
   dockerCommands :=
     {
       import com.typesafe.sbt.packager.docker.*
@@ -69,11 +69,16 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
       Cmd("RUN",
         """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
           |apt-get update && \
-          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales && \
+          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo && \
           |apt-get install -y singularity-container && \
           |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
           |mkdir -p /lib/modules && \
-          |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf
+          |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf && \
+          |useradd --system --create-home --uid 1002 job && \
+          |echo "miniclust ALL=(job) NOPASSWD: ALL" > /etc/sudoers.d/miniclust_to_job && \
+          |chmod 440 /etc/sudoers.d/miniclust_to_job && \
+          |echo 'miniclust ALL=(root) NOPASSWD: /bin/chown' > /etc/sudoers.d/miniclust_chown && \
+          |chmod 440 /etc/sudoers.d/miniclust_chown
           |""".stripMargin)
       ) ++ dockerCommands.value.drop(executionStageOffset)
   },

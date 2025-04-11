@@ -36,19 +36,20 @@ object Compute:
   val processDestroyer = new ProcessDestroyer
 
   object ComputeConfig:
-    def apply(baseDirectory: File, cache: Int) =
+    def apply(baseDirectory: File, cache: Int, sudo: Option[String] = None) =
       baseDirectory.createDirectories()
       val jobDirectory = baseDirectory / "job"
       jobDirectory.createDirectories()
-      new ComputeConfig(baseDirectory, jobDirectory)
+      new ComputeConfig(baseDirectory, jobDirectory, sudo)
 
-  case class ComputeConfig(baseDirectory: File, jobDirectory: File)
+  case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
 
   def runJob(server: Minio.Server, coordinationBucket: Minio.Bucket)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache, Async.Spawn) =
     val (job, run) = JobPull.pull(server, coordinationBucket)
     val heartBeat = JobPull.startHeartBeat(coordinationBucket, run, job)
     try
       val msg = Compute.run(coordinationBucket, job, run)
+      logger.info(s"${job.id}: job successful")
       Minio.upload(job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
     finally heartBeat.stop()
     JobPull.checkOut(coordinationBucket, job)
@@ -84,7 +85,7 @@ object Compute:
 
 
   def uploadOutput(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
-    (r.stdOut ++ r.stdErr).foreach: o =>
+    (r.stdOut ++ r.stdErr).toSeq.map: o =>
       Future:
         val local = jobDirectory(id) / o
         if !local.exists
@@ -92,11 +93,12 @@ object Compute:
         Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
 
   def uploadOutputFiles(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
-    r.outputFile.foreach: output =>
+    r.outputFile.map: output =>
       Future:
         val local = jobDirectory(id) / output.local
         if !local.exists
         then throw new InvalidParameterException(s"Output file ${output.local} does not exist")
+        logger.info(s"${id}: upload file ${local} to ${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
         Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
 
   def createJobDirectory(id: String)(using config: ComputeConfig) =
@@ -148,7 +150,14 @@ object Compute:
             logger.info(s"${job.id}: run ${r.command}")
 
             val process =
-              try Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
+              try
+                config.sudo match
+                  case None => Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
+                  case Some(sudo) =>
+                    (
+                      Process(s"sudo chown ${sudo} -R ${jobDirectory(job.id)}") #&&
+                      Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava)
+                    ).run(processLogger)
               catch
                 case e: Exception =>
                   logger.info(s"${job.id}: error launching job execution $e")
@@ -174,15 +183,14 @@ object Compute:
         if exit != 0
         then
           Async.blocking:
-            uploadOutput(job.bucket, r, job.id)
+            uploadOutput(job.bucket, r, job.id).awaitAll
 
           boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
 
         try
           Async.blocking:
-            uploadOutput(job.bucket, r, job.id)
-            uploadOutputFiles(job.bucket, r, job.id)
-
+            val futures = uploadOutput(job.bucket, r, job.id) ++ uploadOutputFiles(job.bucket, r, job.id)
+            futures.awaitAll
         catch
           case e: Exception =>
             logger.info(s"${job.id}: error completing the job $e")

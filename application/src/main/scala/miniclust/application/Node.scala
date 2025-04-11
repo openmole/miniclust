@@ -44,7 +44,8 @@ import scala.util.hashing.MurmurHash3
       given Compute.ComputeConfig =
         Compute.ComputeConfig(
           baseDirectory = File(configuration.compute.workDirectory) / i.toString,
-          cache = configuration.compute.cache
+          cache = configuration.compute.cache,
+          sudo = configuration.compute.sudo
         )
 
       given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i))

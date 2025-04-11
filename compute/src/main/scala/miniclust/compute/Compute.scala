@@ -78,7 +78,7 @@ object Compute:
                     tmp.delete(true)
                     throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
 
-                  tmp.moveTo(file)
+                  tmp.copyTo(file)
 
                 Files.createLink(local.toJava.toPath, file.toJava.toPath)
       .awaitAll
@@ -156,7 +156,8 @@ object Compute:
                   case Some(sudo) =>
                     (
                       Process(s"sudo chown -R ${sudo} ${jobDirectory(job.id)}") #&&
-                      Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava)
+                      Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava) #&&
+                      Process(s"sudo chown -R $$(whoami) ${jobDirectory(job.id)}")
                     ).run(processLogger)
               catch
                 case e: Exception =>

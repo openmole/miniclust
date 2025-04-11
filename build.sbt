@@ -78,6 +78,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
           |echo "miniclust ALL=(job) NOPASSWD: ALL" > /etc/sudoers.d/miniclust_to_job && \
           |chmod 440 /etc/sudoers.d/miniclust_to_job && \
           |echo 'miniclust ALL=(root) NOPASSWD: /bin/chown -R job *' > /etc/sudoers.d/miniclust_chown && \
+          |echo 'miniclust ALL=(root) NOPASSWD: /bin/chown -R miniclust *' >> /etc/sudoers.d/miniclust_chown && \
           |chmod 440 /etc/sudoers.d/miniclust_chown
           |""".stripMargin)
       ) ++ dockerCommands.value.drop(executionStageOffset)

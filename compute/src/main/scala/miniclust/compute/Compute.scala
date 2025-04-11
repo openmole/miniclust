@@ -157,7 +157,7 @@ object Compute:
                     (
                       Process(s"sudo chown -R ${sudo} ${jobDirectory(job.id)}") #&&
                       Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava) #&&
-                      Process(s"sudo chown -R $$(whoami) ${jobDirectory(job.id)}")
+                      Process(s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(job.id)}'")
                     ).run(processLogger)
               catch
                 case e: Exception =>

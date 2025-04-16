@@ -75,7 +75,6 @@ object FileCache:
         then file.toJava.setLastModified(System.currentTimeMillis())
 
 
-
   object LockRepository:
     def apply[T]() = new LockRepository[T]()
 
@@ -108,6 +107,7 @@ object FileCache:
         try cleanLock(obj)
         finally lock.unlock()
 
+  opaque type Used = String
 
 case class FileCache(folder: File, maxSize: Long):
   val locks = FileCache.LockRepository[String]()

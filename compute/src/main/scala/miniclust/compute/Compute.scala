@@ -78,9 +78,9 @@ object Compute:
                     tmp.delete(true)
                     throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
 
-                  tmp.copyTo(file)
+                  tmp.moveTo(file)
 
-                Files.createLink(local.toJava.toPath, file.toJava.toPath)
+                Files.copy(local.toJava.toPath, file.toJava.toPath)
       .awaitAll
 
 

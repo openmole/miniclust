@@ -36,7 +36,7 @@ object JobPull:
 
   val virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()
 
-  case class JobPullConfig(random: util.Random, cleanFrequency: Double = 0.001, oldData: Long = 7 * 60 * 60 * 24)
+  case class JobPullConfig(random: util.Random)
   case class SubmittedJob(bucket: Bucket, id: String)
 
   object RunningJob:
@@ -54,27 +54,10 @@ object JobPull:
 
   case class RunningJob(bucketName: String, id: String, ping: Long)
 
-  class HeartBeat(coordinationBucket: Bucket, message: String, job: SubmittedJob, var waitTime: Option[Int]):
-    hb =>
-
-    def stop() =
-      hb.synchronized:
-        waitTime = None
-
-    def run() =
-      while waitTime.isDefined
-      do
-        waitTime.foreach: w =>
-          hb.synchronized:
-            Minio.upload(coordinationBucket, message, JobPull.RunningJob.path(job), contentType = Some(Minio.jsonContentType))
-          Thread.sleep(w * 1000)
-
   def startHeartBeat(coordinationBucket: Bucket, run: Message.Submitted, job: SubmittedJob) =
-    val hb = new HeartBeat(coordinationBucket, MiniClust.generateMessage(run), job, Some(5))
-    virtualThreadExecutor.submit:
-      new Runnable:
-        def run() = hb.run()
-    hb
+    val message = MiniClust.generateMessage(run)
+    Cron.seconds(5): () =>
+      Minio.upload(coordinationBucket, message, JobPull.RunningJob.path(job), contentType = Some(Minio.jsonContentType))
 
   def canceled(bucket: Bucket, id: String) =
     try
@@ -156,17 +139,7 @@ object JobPull:
     then logger.info(s"Removed jobs without heartbeat: ${oldJobs}")
 
 
-  def removeOldData(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig) =
-    val date = Minio.date(coordinationBucket.server)
-    def tooOld(d: Long) = (date - d) > config.oldData
-
-    config.random.shuffle(Minio.listUserBuckets(server)).take(1).foreach: b =>
-      val oldStatus = Minio.listObjects(b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
-      val oldOutputs = Minio.listObjects(b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
-      Minio.delete(b, (oldStatus ++ oldOutputs).map(_.objectName())*)
-
   def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): (SubmittedJob, Message.Submitted) =
-    if config.random.nextDouble() < config.cleanFrequency then removeOldData(server, coordinationBucket)
     removeAbandonedJobs(server, coordinationBucket)
     val job = selectJob(server, coordinationBucket)
 

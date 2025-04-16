@@ -3,7 +3,7 @@ package miniclust.application
 import better.files.File
 import gears.async.default.given
 import gears.async.*
-import miniclust.compute.{Compute, Configuration, FileCache, JobPull}
+import miniclust.compute.*
 import miniclust.message.{MiniClust, Minio}
 
 import java.util.UUID
@@ -33,11 +33,14 @@ import scala.util.hashing.MurmurHash3
   val baseDirectory = File(configuration.compute.workDirectory)
   baseDirectory.createDirectories()
 
-  given FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
+  given fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
 
   val server = Minio.Server(configuration.minio.url, configuration.minio.user, configuration.minio.password, insecure = configuration.minio.insecure)
   val coordinationBucket = Minio.bucket(server, MiniClust.Coordination.bucketName)
   val seed = UUID.randomUUID().hashCode()
+
+  val random = util.Random(seed)
+  Service.startBackgroud(server, coordinationBucket, fileCache, random)
 
   Async.blocking:
     (0 until Runtime.getRuntime.availableProcessors()).map: i =>
@@ -48,7 +51,7 @@ import scala.util.hashing.MurmurHash3
           sudo = configuration.compute.sudo
         )
 
-      given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i))
+      given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
       runWorker(server, coordinationBucket)
     .awaitAll
 

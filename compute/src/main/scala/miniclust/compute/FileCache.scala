@@ -41,7 +41,7 @@ object FileCache:
       .sortBy(_.lastModified() < dateLimit).foreach: f =>
         f.delete()
 
-  private def enforceSizeLimit(cache: FileCache): Unit =
+  def enforceSizeLimit(cache: FileCache): Unit =
     val files =
       cache.folder.list.map(_.toJava).toSeq
       .filter(_.isFile)
@@ -68,15 +68,12 @@ object FileCache:
 
   def use[A](cache: CachedFile)(op: File => A): A =
     val file = cache.fileCache.folder / cache.name
-    val result =
-      cache.fileCache.locks.withLock(cache.name):
-        try op(file)
-        finally
-          if file.exists
-          then file.toJava.setLastModified(System.currentTimeMillis())
+    cache.fileCache.locks.withLock(cache.name):
+      try op(file)
+      finally
+        if file.exists
+        then file.toJava.setLastModified(System.currentTimeMillis())
 
-    enforceSizeLimit(cache.fileCache)
-    result
 
 
   object LockRepository:

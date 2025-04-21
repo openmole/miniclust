@@ -59,6 +59,19 @@ object Compute:
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
   def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
+    def createCache(file: File, remote: String, providedHash: String) =
+      val tmp = File.newTemporaryFile()
+      Minio.download(bucket, remote, tmp.toJava)
+      val hash = Tool.hashFile(tmp.toJava)
+
+      if hash != providedHash
+      then
+        tmp.delete(true)
+        throw new InvalidParameterException(s"Cache key for file ${remote} is not the hash of the file, should be equal to $hash")
+
+      tmp.moveTo(file)
+      FileCache.setPermissions(file)
+
     val cacheUse =
       Async.blocking:
         r.inputFile.map: input =>
@@ -73,20 +86,7 @@ object Compute:
                   Some:
                     val (file, key) =
                       FileCache.use(fileCache, providedHash): file =>
-                        if !file.exists
-                        then
-                          val tmp = File.newTemporaryFile()
-                          Minio.download(bucket, input.remote, tmp.toJava)
-                          val hash = Tool.hashFile(tmp.toJava)
-
-                          if hash != providedHash
-                          then
-                            tmp.delete(true)
-                            throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
-
-                          tmp.moveTo(file)
-                          FileCache.setPermissions(file)
-
+                        createCache(file, input.remote, providedHash)
                     Files.createSymbolicLink(local.toJava.toPath, file.toJava.getAbsoluteFile.toPath)
                     key
         .awaitAll

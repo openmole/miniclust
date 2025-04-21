@@ -121,4 +121,7 @@ object FileCache:
 
       fileCache.cache.asMap().compute(name, deleteFunction)
 
-case class FileCache(cache: Cache[String, File], fileFolder: File, usageTracker: FileCache.UsageTracker)
+case class FileCache(
+  cache: Cache[String, File],
+  fileFolder: File,
+  usageTracker: FileCache.UsageTracker)

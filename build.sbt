@@ -1,6 +1,6 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.6.4"
+val scala3Version = "3.3.5"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"

@@ -2,13 +2,14 @@ package miniclust.compute
 
 import miniclust.message.Minio.Bucket
 import miniclust.message.*
+
 import java.io.FileNotFoundException
 import java.time.{Duration, ZonedDateTime}
 import java.util.concurrent.Executors
 import scala.util.*
-
 import gears.async.*
 import gears.async.default.given
+import miniclust.compute.JobPull.RunningJob.{name, path}
 
 
 /*
@@ -117,26 +118,29 @@ object JobPull:
 
   def removeAbandonedJobs(server: Minio.Server, coordinationBucket: Bucket) =
     val date = Minio.date(coordinationBucket.server)
-    val oldJobs = runningJobs(coordinationBucket).filter: o =>
-        (date - o.ping) > 60
+    val prefix = s"${MiniClust.Coordination.jobDirectory}/"
+    Minio.lazyListObjects(coordinationBucket, prefix = prefix): it =>
+      def listOldJobs =
+        it.view.filterNot(_.get().isDir).map: i =>
+          RunningJob.parse(i.get().objectName().drop(prefix.size), i.get().lastModified().toEpochSecond)
+        .filter(o => (date - o.ping) > 60)
 
-    for
-      j <- oldJobs
-    do
-      Minio.upload(
-        Bucket(server, j.bucketName),
-        MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
-        MiniClust.User.jobStatus(j.id),
-        contentType = Some(Minio.jsonContentType)
-      )
+      for
+        j <- listOldJobs
+      do
+        Minio.upload(
+          Bucket(server, j.bucketName),
+          MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
+          MiniClust.User.jobStatus(j.id),
+          contentType = Some(Minio.jsonContentType)
+        )
 
-    Minio.delete(
-      coordinationBucket,
-      oldJobs.map(j => s"${RunningJob.path(j)}")*
-    )
+        Minio.delete(
+          coordinationBucket,
+          s"${RunningJob.path(j)}"
+        )
 
-    if oldJobs.nonEmpty
-    then logger.info(s"Removed jobs without heartbeat: ${oldJobs}")
+        logger.info(s"Removed job without heartbeat: ${j.id}")
 
 
   def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): (SubmittedJob, Message.Submitted) =

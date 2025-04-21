@@ -56,6 +56,7 @@ import scala.concurrent.duration.*
 
   println(s)
   println(Minio.content(bucket, MiniClust.User.jobOutputPath(id, "output.txt")))
+  clean(bucket, id)
 
 //
 //  val futs = Future.sequence:

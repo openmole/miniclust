@@ -1,6 +1,7 @@
 package miniclust.message
 
 import io.minio.errors.*
+import io.minio.messages.*
 
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import okhttp3.*
@@ -189,6 +190,13 @@ object Minio:
         ListObjectsArgs.builder().bucket(bucket.name).prefix(prefix).recursive(recursive).build()
       ).asScala.toSeq.map: i =>
         i.get()
+
+  def lazyListObjects[T](bucket: Bucket, prefix: String, recursive: Boolean = false)(f: Iterable[Result[Item]] => T): T =
+    withClient(bucket.server): c =>
+      f:
+        c.listObjects(
+          ListObjectsArgs.builder().bucket(bucket.name).prefix(prefix).recursive(recursive).build()
+        ).asScala
 
   def exists(bucket: Bucket, prefix: String) =
     withClient(bucket.server): c =>

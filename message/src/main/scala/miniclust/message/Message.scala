@@ -19,7 +19,12 @@ package miniclust.message
 
 case class Account(bucket: String)
 
-case class InputFile(remote: String, local: String, cacheKey: Option[String] = None)
+object InputFile:
+  object Cache:
+    given Conversion[String, Cache] = s => Cache(s)
+  case class Cache(hash: String, extract: Boolean = false)
+
+case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.Cache] = None)
 case class OutputFile(local: String, remote: String)
 
 object Message:

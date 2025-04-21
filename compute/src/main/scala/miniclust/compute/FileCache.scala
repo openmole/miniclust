@@ -69,7 +69,7 @@ object FileCache:
 
 
   def apply(folder: File, maxSize: Long) =
-    val fileFolder = (folder / "file").createDirectories()
+    val fileFolder = folder.createDirectories()
     setPermissions(folder)
     
     val fileWeigher = new Weigher[String, File]:
@@ -86,7 +86,12 @@ object FileCache:
 
     new FileCache(cache, fileFolder, UsageTracker())
 
-  def use(fileCache: FileCache, name: String)(create: File => Unit): (File, UsedKey) =
+  def use(fileCache: FileCache, hash: String, extract: Boolean = false)(create: File => Unit): (File, UsedKey) =
+    val name =
+      if !extract
+      then s"file-$hash"
+      else s"tgz-$hash"
+
     fileCache.usageTracker.acquire(name)
     def createFunction(name: String): File =
       val cacheFile = fileCache.fileFolder / name

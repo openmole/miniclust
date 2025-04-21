@@ -29,7 +29,7 @@ import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
 import java.util.logging.{Level, Logger}
 import java.nio.file.Files
-import scala.sys.process.ProcessLogger
+import scala.sys.process.*
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
@@ -59,18 +59,33 @@ object Compute:
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
   def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
-    def createCache(file: File, remote: String, providedHash: String) =
+    def createCache(file: File, remote: String, providedHash: String, extract: Boolean = false) =
       val tmp = File.newTemporaryFile()
-      Minio.download(bucket, remote, tmp.toJava)
-      val hash = Tool.hashFile(tmp.toJava)
+      try
+        Minio.download(bucket, remote, tmp.toJava)
+        val hash = Tool.hashFile(tmp.toJava)
 
-      if hash != providedHash
-      then
-        tmp.delete(true)
-        throw new InvalidParameterException(s"Cache key for file ${remote} is not the hash of the file, should be equal to $hash")
+        if hash != providedHash
+        then
+          tmp.delete(true)
+          throw new InvalidParameterException(s"Cache key for file ${remote} is not the hash of the file, should be equal to $hash")
 
-      tmp.moveTo(file)
-      FileCache.setPermissions(file)
+        if !extract
+        then
+          tmp.moveTo(file)
+          FileCache.setPermissions(file)
+        else
+          val tmpDirectory = File.newTemporaryDirectory()
+          if Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
+          then
+            tmpDirectory.delete(true)
+            throw new InvalidParameterException(s"Error extracting the archive ${remote}, should be a tgz archive")
+
+          tmpDirectory.listRecursively.foreach(FileCache.setPermissions)
+          tmpDirectory.moveTo(file)
+          FileCache.setPermissions(file)
+
+      finally tmp.delete(true)
 
     val cacheUse =
       Async.blocking:
@@ -82,11 +97,11 @@ object Compute:
                 case None =>
                   Minio.download(bucket, input.remote, local.toJava)
                   None
-                case Some(providedHash) =>
+                case Some(cache) =>
                   Some:
                     val (file, key) =
-                      FileCache.use(fileCache, providedHash): file =>
-                        createCache(file, input.remote, providedHash)
+                      FileCache.use(fileCache, cache.hash, cache.extract): file =>
+                        createCache(file, input.remote, cache.hash, cache.extract)
                     Files.createSymbolicLink(local.toJava.toPath, file.toJava.getAbsoluteFile.toPath)
                     key
         .awaitAll

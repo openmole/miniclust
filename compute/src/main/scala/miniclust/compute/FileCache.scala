@@ -19,95 +19,106 @@ package miniclust.compute
 
 import miniclust.message.Account
 import better.files.*
+import com.github.benmanes.caffeine.cache.*
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.locks.ReentrantLock
+
 
 object FileCache:
 
-  case class CachedFile(fileCache: FileCache, name: String)
+  opaque type UsedKey = String
 
-  def cached[T](fileCache: FileCache, user: Account, name: String) =
-    CachedFile(fileCache, s"${user.bucket}-${name}")
+  class UsageTracker:
+    private val usageMap = scala.collection.mutable.Map[String, Int]()
+
+    def acquire(key: String): Unit = usageMap.synchronized:
+      usageMap.updateWith(key):
+        case None => Some(1)
+        case Some(v) => Some(v + 1)
+
+    def release(key: String): Unit = usageMap.synchronized:
+      usageMap.updateWith(key):
+        case None => throw IllegalArgumentException(s"Key $key is not in use")
+        case Some(v) =>
+          if v > 1
+          then Some(v - 1)
+          else None
+
+    def isInUse(key: String): Boolean = usageMap.synchronized:
+      usageMap.contains(key)
+
+  def isRemovalFile(name: String) = name.startsWith(".wh.")
+  def removalFile(name: String) = s".wh.$name"
+
+  def setPermissions(file: File): Unit =
+    import java.nio.file.Files
+    import java.nio.file.attribute.PosixFilePermission
+    import scala.jdk.CollectionConverters.*
+
+    val currentPerms = Files.getPosixFilePermissions(file.path).asScala
+    val ownerRead = currentPerms.contains(PosixFilePermission.OWNER_READ)
+    val ownerExec = currentPerms.contains(PosixFilePermission.OWNER_EXECUTE)
+
+    val newPerms = scala.collection.mutable.Set[PosixFilePermission]()
+    newPerms ++= currentPerms
+    if ownerRead then newPerms ++= Seq(PosixFilePermission.GROUP_READ, PosixFilePermission.OTHERS_READ)
+    if ownerExec then newPerms ++= Seq(PosixFilePermission.GROUP_EXECUTE, PosixFilePermission.OTHERS_EXECUTE)
+
+    Files.setPosixFilePermissions(file.path, newPerms.asJava)
+
 
   def apply(folder: File, maxSize: Long) =
-    folder.createDirectories()
-    new FileCache(folder, maxSize)
+    val fileFolder = (folder / "file").createDirectories()
+    setPermissions(folder)
+    
+    val fileWeigher = new Weigher[String, File]:
+      override def weigh(key: String, file: File): Int =
+        val size = if file.exists() then Math.ceil(file.size().toDouble / 1024).toLong else 0L
+        if size > Int.MaxValue then Int.MaxValue else size.toInt
 
-  private def removeOldFiles(cache: FileCache): Unit =
-    val dateLimit = System.currentTimeMillis() - 7 * 1000 * 60 * 60 * 24
+    val removalListener = new RemovalListener[String, File]:
+      override def onRemoval(key: String, file: File, cause: RemovalCause): Unit =
+        if file != null then (folder / removalFile(key)).touch()
 
-    cache.folder.list.map(_.toJava).toSeq
-      .filter(_.isFile)
-      .sortBy(_.lastModified() < dateLimit).foreach: f =>
-        f.delete()
+    val cache: Cache[String, File] =
+      Caffeine.newBuilder().weigher(fileWeigher).maximumWeight(maxSize * 1024).removalListener(removalListener).build()
 
-  def enforceSizeLimit(cache: FileCache): Unit =
-    val files =
-      cache.folder.list.map(_.toJava).toSeq
-      .filter(_.isFile)
-      .sortBy(_.lastModified())
+    new FileCache(cache, fileFolder, UsageTracker())
 
-    def toMega(s: Long) = s.toDouble / (1024 * 1024)
+  def use(fileCache: FileCache, name: String)(create: File => Unit): (File, UsedKey) =
+    fileCache.usageTracker.acquire(name)
+    def createFunction(name: String): File =
+      val cacheFile = fileCache.fileFolder / name
+      (fileCache.fileFolder / removalFile(name)).delete(true)
+      create(cacheFile)
+      cacheFile
 
-    val totalSize = files.map(_.length()).sum
+    try
+      val f = fileCache.cache.get(name, createFunction)
+      (f, name)
+    catch
+      case e: Exception =>
+        fileCache.usageTracker.release(name)
+        throw e
 
-    if toMega(totalSize) > cache.maxSize
-    then
-      var currentSize = totalSize
+  def release(fileCache: FileCache, name: UsedKey) =
+    fileCache.usageTracker.release(name)
 
-      for
-        file <- files
-        if toMega(currentSize) > cache.maxSize
-      do
-        cache.locks.withLock(file.getName):
-          if file.exists()
-          then
-            currentSize -= file.length()
-            file.delete()
+  def clean(fileCache: FileCache) =
+    for
+      file <- fileCache.fileFolder.list
+      name = file.name
+      removal = fileCache.fileFolder / removalFile(name)
+      if !isRemovalFile(name)
+      if removal.exists
+      if !fileCache.usageTracker.isInUse(name)
+    do
+      def deleteFunction(k: String, v: File): Null =
+        v.delete(true)
+        removal.delete(true)
+        null
 
+      fileCache.cache.asMap().compute(name, deleteFunction)
 
-  def use[A](cache: CachedFile)(op: File => A): A =
-    val file = cache.fileCache.folder / cache.name
-    cache.fileCache.locks.withLock(cache.name):
-      try op(file)
-      finally
-        if file.exists
-        then file.toJava.setLastModified(System.currentTimeMillis())
-
-
-  object LockRepository:
-    def apply[T]() = new LockRepository[T]()
-
-  class LockRepository[T]:
-    import java.util.concurrent.locks.*
-
-    val locks = new collection.mutable.HashMap[T, (ReentrantLock, AtomicInteger)]
-
-    def nbLocked(k: T) = locks.synchronized(locks.get(k).map { (_, users) => users.get }.getOrElse(0))
-
-    private def getLock(obj: T) = locks.synchronized:
-      val (lock, users) = locks.getOrElseUpdate(obj, (new ReentrantLock, new AtomicInteger(0)))
-      users.incrementAndGet
-      lock
-
-    private def cleanLock(obj: T) = locks.synchronized:
-      locks.get(obj) match
-        case Some((lock, users)) =>
-          val value = users.decrementAndGet
-          if (value <= 0) locks.remove(obj)
-          lock
-        case None => throw new IllegalArgumentException("Unlocking an object that has not been locked.")
-
-
-    def withLock[A](obj: T)(op: => A) =
-      val lock = getLock(obj)
-      lock.lock()
-      try op
-      finally
-        try cleanLock(obj)
-        finally lock.unlock()
-
-  opaque type Used = String
-
-case class FileCache(folder: File, maxSize: Long):
-  val locks = FileCache.LockRepository[String]()
+case class FileCache(cache: Cache[String, File], fileFolder: File, usageTracker: FileCache.UsageTracker)

@@ -165,5 +165,5 @@ object JobPull:
             pull(server, coordinationBucket)
         else pull(server, coordinationBucket)
       case None =>
-        Thread.sleep(2000)
+        Thread.sleep(config.random.nextInt(2000))
         pull(server, coordinationBucket)

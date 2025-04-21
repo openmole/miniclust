@@ -26,9 +26,10 @@ import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
 
 import java.security.InvalidParameterException
-import scala.util.boundary
+import scala.util.{Failure, Success, boundary}
 import java.util.logging.{Level, Logger}
 import java.nio.file.Files
+import scala.sys.process.ProcessLogger
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
@@ -57,31 +58,47 @@ object Compute:
 
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
-  def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Unit =
-    Async.blocking:
-      r.inputFile.map: input =>
-        Future:
-          val local = jobDirectory(id) / input.local
-          input.cacheKey match
-            case None => Minio.download(bucket, input.remote, local.toJava)
-            case Some(l) =>
-              val cached = FileCache.cached(fileCache, r.account, l)
-              FileCache.use(cached): file =>
-                if !file.exists
-                then
-                  val tmp = File.newTemporaryFile()
-                  Minio.download(bucket, input.remote, tmp.toJava)
-                  val hash = Tool.hashFile(tmp.toJava)
+  def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
+    val cacheUse =
+      Async.blocking:
+        r.inputFile.map: input =>
+          Future:
+            util.Try:
+              val local = jobDirectory(id) / input.local
+              input.cacheKey match
+                case None =>
+                  Minio.download(bucket, input.remote, local.toJava)
+                  None
+                case Some(providedHash) =>
+                  Some:
+                    val (file, key) =
+                      FileCache.use(fileCache, providedHash): file =>
+                        if !file.exists
+                        then
+                          val tmp = File.newTemporaryFile()
+                          Minio.download(bucket, input.remote, tmp.toJava)
+                          val hash = Tool.hashFile(tmp.toJava)
 
-                  if hash != l
-                  then
-                    tmp.delete(true)
-                    throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
+                          if hash != providedHash
+                          then
+                            tmp.delete(true)
+                            throw new InvalidParameterException(s"Cache key for file ${input.remote} is not the hash of the file, should be equal to $hash")
 
-                  tmp.moveTo(file)
+                          tmp.moveTo(file)
+                          FileCache.setPermissions(file)
 
-                Files.copy(local.toJava.toPath, file.toJava.toPath)
-      .awaitAll
+                    Files.createSymbolicLink(local.toJava.toPath, file.toJava.getAbsoluteFile.toPath)
+                    key
+        .awaitAll
+
+    val (successTry, failureTry) = cacheUse.partition(_.isSuccess)
+    val successValues = successTry.collect { case Success(s) => s }
+    val failureValues = failureTry.collect { case Failure(e) => e }
+    if failureValues.nonEmpty
+    then
+      successValues.flatten.foreach(FileCache.release(fileCache, _))
+      throw failureValues.head
+    else successValues.flatten
 
 
   def uploadOutput(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
@@ -107,6 +124,24 @@ object Compute:
 
   def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
 
+  def createProcess(id: String, command: String, processLogger: ProcessLogger)(using config: ComputeConfig, label: boundary.Label[Message]) =
+    import scala.sys.process.*
+
+    try
+      config.sudo match
+        case None => Process(command, cwd = jobDirectory(id).toJava).run(processLogger)
+        case Some(sudo) =>
+          val p =
+            Process(s"sudo chown -R ${sudo} ${jobDirectory(id)}") #&&
+              Process(s"sudo -u ${sudo} -- ${command}", cwd = jobDirectory(id).toJava) #&&
+              Process(s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(id)}'")
+          p.run(processLogger)
+    catch
+      case e: Exception =>
+        logger.info(s"${id}: error launching job execution $e")
+        boundary.break(Message.Failed(id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
+
+
   def run(
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob,
@@ -125,68 +160,57 @@ object Compute:
 
         testCanceled()
 
-        try prepare(job.bucket, r, job.id)
-        catch
-           case e: Exception =>
-             logger.info(s"${job.id}: error preparing files $e")
-             boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
+        val usedCache =
+          try prepare(job.bucket, r, job.id)
+          catch
+             case e: Exception =>
+               logger.info(s"${job.id}: error preparing files $e")
+               boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
 
-        testCanceled()
+        try
+          testCanceled()
 
-        val outputWriter = r.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
-        val errorWriter = r.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+          val outputWriter = r.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+          val errorWriter = r.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
 
-        val exit =
-          try
-            val processLogger = ProcessLogger(
-              line => outputWriter match
-                case Some(writer) => writer.println(line)
-                case None => println(line),
-              line => errorWriter match
-                case Some(writer) => writer.println(line)
-                case None => System.err.println(line)
-            )
+          val exit =
+            try
+              val processLogger = ProcessLogger(
+                line => outputWriter match
+                  case Some(writer) => writer.println(line)
+                  case None => println(line),
+                line => errorWriter match
+                  case Some(writer) => writer.println(line)
+                  case None => System.err.println(line)
+              )
 
-            logger.info(s"${job.id}: run ${r.command}")
+              logger.info(s"${job.id}: run ${r.command}")
 
-            val process =
-              try
-                config.sudo match
-                  case None => Process(r.command, cwd = jobDirectory(job.id).toJava).run(processLogger)
-                  case Some(sudo) =>
-                    (
-                      Process(s"sudo chown -R ${sudo} ${jobDirectory(job.id)}") #&&
-                      Process(s"sudo -u ${sudo} -- ${r.command}", cwd = jobDirectory(job.id).toJava) #&&
-                      Process(s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(job.id)}'")
-                    ).run(processLogger)
-              catch
-                case e: Exception =>
-                  logger.info(s"${job.id}: error launching job execution $e")
-                  boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
+              val process = createProcess(job.id, r.command, processLogger)
+              processDestroyer.add(process)
 
-            processDestroyer.add(process)
+              while process.isAlive()
+              do
+                testCanceled()
+                Thread.sleep(5000)
 
-            while process.isAlive()
-            do
-              testCanceled()
-              Thread.sleep(5000)
+              try process.exitValue()
+              finally processDestroyer.remove(process)
+            finally
+              outputWriter.foreach(_.close())
+              errorWriter.foreach(_.close())
 
-            try process.exitValue()
-            finally processDestroyer.remove(process)
-          finally
-            outputWriter.foreach(_.close())
-            errorWriter.foreach(_.close())
+          logger.info(s"${job.id}: complete job")
 
-        logger.info(s"${job.id}: complete job")
+          testCanceled()
 
-        testCanceled()
+          if exit != 0
+          then
+            Async.blocking:
+              uploadOutput(job.bucket, r, job.id).awaitAll
 
-        if exit != 0
-        then
-          Async.blocking:
-            uploadOutput(job.bucket, r, job.id).awaitAll
-
-          boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
+            boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
+        finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
           Async.blocking:

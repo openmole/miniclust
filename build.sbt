@@ -1,6 +1,6 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.3.5"
+val scala3Version = "3.6.4"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"
@@ -26,6 +26,7 @@ lazy val compute = project
     libraryDependencies += "com.github.pathikrit" %% "better-files" % "3.9.2",
     libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.0",
     libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
+    libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.0",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .dependsOn(message)

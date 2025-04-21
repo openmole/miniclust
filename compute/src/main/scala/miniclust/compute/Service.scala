@@ -28,8 +28,8 @@ object Service:
     val removeRandom = Random(random.nextLong)
     Cron.seconds(5 * 60): () =>
       removeOldData(server, coordinationBucket, old, removeRandom)
-    Cron.seconds(5 * 60): () =>
-      FileCache.enforceSizeLimit(fileCache)
+    Cron.seconds(60): () =>
+      FileCache.clean(fileCache)
 
   def removeOldData(server: Minio.Server, coordinationBucket: Minio.Bucket, old: Int, random: Random) =
     val date = Minio.date(coordinationBucket.server)

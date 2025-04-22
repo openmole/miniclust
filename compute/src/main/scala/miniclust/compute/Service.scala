@@ -30,6 +30,9 @@ object Service:
       removeOldData(server, coordinationBucket, old, removeRandom)
     Cron.seconds(60): () =>
       FileCache.clean(fileCache)
+    Cron.seconds(60): () =>
+      JobPull.removeAbandonedJobs(server, coordinationBucket)
+
 
   def removeOldData(server: Minio.Server, coordinationBucket: Minio.Bucket, old: Int, random: Random) =
     val date = Minio.date(coordinationBucket.server)

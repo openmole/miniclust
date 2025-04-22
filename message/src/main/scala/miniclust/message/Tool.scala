@@ -27,6 +27,13 @@ object Tool:
     val hashBytes = Blake3.hash(input.getBytes(StandardCharsets.UTF_8))
     s"blake3:${hashBytes.map("%02x".format(_)).mkString}"
 
+  def splitHash(hash: String) =
+    val i = hash.indexOf(":")
+    if i == -1
+    then ("", hash)
+    else (hash.take(i), hash.drop(i + 1))
+
+
   def hashFile(input: File): String =
     val hasher = Blake3.initHash()
     val buffer = Array.ofDim[Byte](64 * 1024 * 1024)

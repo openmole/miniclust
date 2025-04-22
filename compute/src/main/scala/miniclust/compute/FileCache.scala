@@ -17,7 +17,7 @@ package miniclust.compute
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import miniclust.message.Account
+import miniclust.message.{Account, Tool}
 import better.files.*
 import com.github.benmanes.caffeine.cache.*
 
@@ -88,9 +88,10 @@ object FileCache:
 
   def use(fileCache: FileCache, hash: String, extract: Boolean = false)(create: File => Unit): (File, UsedKey) =
     val name =
+      val (_, hashValue) = Tool.splitHash(hash)
       if !extract
-      then s"file-$hash"
-      else s"tgz-$hash"
+      then s"file-$hashValue"
+      else s"tgz-$hashValue"
 
     fileCache.usageTracker.acquire(name)
     def createFunction(name: String): File =

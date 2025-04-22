@@ -121,7 +121,7 @@ object Compute:
       Future:
         val local = jobDirectory(id) / o
         if !local.exists
-        then throw new InvalidParameterException(s"Output file $o does not exist")
+        then throw new InvalidParameterException(s"Standard output file $o does not exist")
         Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
 
   def uploadOutputFiles(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
@@ -229,8 +229,8 @@ object Compute:
 
         try
           Async.blocking:
-            val futures = uploadOutput(job.bucket, r, job.id) ++ uploadOutputFiles(job.bucket, r, job.id)
-            futures.awaitAll
+            uploadOutput(job.bucket, r, job.id).awaitAll
+            uploadOutputFiles(job.bucket, r, job.id).awaitAll
         catch
           case e: Exception =>
             logger.info(s"${job.id}: error completing the job $e")

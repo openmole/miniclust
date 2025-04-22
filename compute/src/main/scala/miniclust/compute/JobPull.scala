@@ -1,6 +1,6 @@
 package miniclust.compute
 
-import miniclust.message.Minio.Bucket
+import miniclust.message.Minio.{Bucket, listObjects}
 import miniclust.message.*
 
 import java.io.FileNotFoundException
@@ -122,29 +122,29 @@ object JobPull:
     Minio.lazyListObjects(coordinationBucket, prefix = prefix): it =>
       def listOldJobs =
         it.view.filterNot(_.get().isDir).map: i =>
-          RunningJob.parse(i.get().objectName().drop(prefix.size), i.get().lastModified().toEpochSecond)
-        .filter(o => (date - o.ping) > 60)
+          val o = i.get()
+          RunningJob.parse(o.objectName().drop(prefix.length), Option(o.lastModified()).map(_.toEpochSecond).getOrElse(0))
+        .filter:
+          o =>
+            (date - o.ping) > 60
 
       for
         j <- listOldJobs
       do
-        Minio.upload(
-          Bucket(server, j.bucketName),
-          MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
-          MiniClust.User.jobStatus(j.id),
-          contentType = Some(Minio.jsonContentType)
-        )
+        util.Try:
+          Minio.upload(
+            Bucket(server, j.bucketName),
+            MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
+            MiniClust.User.jobStatus(j.id),
+            contentType = Some(Minio.jsonContentType)
+          )
 
-        Minio.delete(
-          coordinationBucket,
-          s"${RunningJob.path(j)}"
-        )
+        Minio.delete(coordinationBucket, s"${RunningJob.path(j)}")
 
         logger.info(s"Removed job without heartbeat: ${j.id}")
 
 
   def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): (SubmittedJob, Message.Submitted) =
-    removeAbandonedJobs(server, coordinationBucket)
     val job = selectJob(server, coordinationBucket)
 
     job match

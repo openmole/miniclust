@@ -7,6 +7,7 @@ import miniclust.compute.*
 import miniclust.message.{MiniClust, Minio}
 
 import java.util.UUID
+import java.util.concurrent.Executors
 import java.util.logging.*
 import scala.util.hashing.MurmurHash3
 
@@ -29,6 +30,8 @@ import scala.util.hashing.MurmurHash3
 
 
 @main def run(configurationFile: String) =
+  val cores = Runtime.getRuntime.availableProcessors()
+
   val configuration = Configuration.read(File(configurationFile))
   val baseDirectory = File(configuration.compute.workDirectory)
   baseDirectory.createDirectories()
@@ -42,24 +45,23 @@ import scala.util.hashing.MurmurHash3
   val random = util.Random(seed)
   Service.startBackgroud(server, coordinationBucket, fileCache, random)
 
-  Async.blocking:
-    (0 until Runtime.getRuntime.availableProcessors()).map: i =>
-      given Compute.ComputeConfig =
-        Compute.ComputeConfig(
-          baseDirectory = File(configuration.compute.workDirectory) / i.toString,
-          cache = configuration.compute.cache,
-          sudo = configuration.compute.sudo
-        )
+  val pool = ComputingResource(cores)
 
-      given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
-      runWorker(server, coordinationBucket)
-    .awaitAll
+  (0 until 10).map: i =>
+    given Compute.ComputeConfig =
+      Compute.ComputeConfig(
+        baseDirectory = File(configuration.compute.workDirectory) / i.toString,
+        cache = configuration.compute.cache,
+        sudo = configuration.compute.sudo
+      )
 
-def runWorker(server: Minio.Server, coordinationBucket: Minio.Bucket)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache, Async.Spawn) =
-  Future:
-    while true
-    do
-      try Compute.runJob(server, coordinationBucket)
-      catch
-        case e: Exception =>
-          Compute.logger.log(Level.SEVERE, "Error in run loop", e)
+    given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
+
+    Background.run:
+      while true
+      do
+        try JobPull.pullJob(server, coordinationBucket, pool)
+        catch
+          case e: Exception =>
+            Compute.logger.log(Level.SEVERE, "Error in run loop", e)
+

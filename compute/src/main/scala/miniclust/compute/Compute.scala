@@ -29,12 +29,14 @@ import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
 import java.util.logging.{Level, Logger}
 import java.nio.file.Files
+import java.util.concurrent.ExecutorService
 import scala.sys.process.*
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
 
   val processDestroyer = new ProcessDestroyer
+
 
   object ComputeConfig:
     def apply(baseDirectory: File, cache: Int, sudo: Option[String] = None) =
@@ -44,16 +46,6 @@ object Compute:
       new ComputeConfig(baseDirectory, jobDirectory, sudo)
 
   case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
-
-  def runJob(server: Minio.Server, coordinationBucket: Minio.Bucket)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache, Async.Spawn) =
-    val job = JobPull.pull(server, coordinationBucket)
-    val heartBeat = JobPull.startHeartBeat(coordinationBucket, job)
-    try
-      val msg = Compute.run(coordinationBucket, job)
-      logger.info(s"${job.id}: job successful")
-      Minio.upload(job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-    finally heartBeat.stop()
-    JobPull.checkOut(coordinationBucket, job)
 
 
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
@@ -206,7 +198,7 @@ object Compute:
               while process.isAlive()
               do
                 testCanceled()
-                Thread.sleep(5000)
+                Thread.sleep(10000)
 
               try process.exitValue()
               finally processDestroyer.remove(process)

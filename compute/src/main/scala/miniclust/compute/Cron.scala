@@ -23,7 +23,13 @@ import scala.util.*
  */
 
 
+object Background:
+  def run(t: => Unit) =
+    import Cron.given_ExecutionContext
+    Future(t)
+
 object Cron:
+
   val daemonThreadFactory = new ThreadFactory:
     override def newThread(r: Runnable): Thread =
       val t = Thread(r)

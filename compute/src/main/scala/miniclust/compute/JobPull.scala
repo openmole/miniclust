@@ -117,7 +117,7 @@ object JobPull:
         val (bucket, id) = u(config.random.nextInt(u.size))
         validate(bucket, id) match
           case Success(s) =>
-            val cores = s.resource.collectFirst { case r: Message.Resource.Core => r.n }.getOrElse(1)
+            val cores = s.resource.collectFirst { case r: Resource.Core => r.n }.getOrElse(1)
             ComputingResource.request(pool, cores) match
               case Some(r) => SubmittedJob(bucket, id, s, r)
               case None => NotSelected.NotEnoughResource

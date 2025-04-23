@@ -27,6 +27,9 @@ object InputFile:
 case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.Cache] = None)
 case class OutputFile(local: String, remote: String)
 
+enum Resource:
+  case Core(n: Int)
+
 object Message:
   extension (m: Message)
     def finished =
@@ -45,9 +48,6 @@ object Message:
   object Failed:
     enum Reason:
       case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed
-
-  enum Resource:
-    case Core(n: Int)
 
   case class Submitted(
     account: Account,

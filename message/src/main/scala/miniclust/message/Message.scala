@@ -46,6 +46,9 @@ object Message:
     enum Reason:
       case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed
 
+  enum Resource:
+    case Core(n: Int)
+
   case class Submitted(
     account: Account,
     command: String,
@@ -53,6 +56,7 @@ object Message:
     outputFile: Seq[OutputFile] = Seq(),
     stdOut: Option[String] = None,
     stdErr: Option[String] = None,
+    resource: Seq[Resource] = Seq(),
     noise: String = "") extends Message
 
   case class Failed(id: String, message: String, reason: Failed.Reason) extends Message

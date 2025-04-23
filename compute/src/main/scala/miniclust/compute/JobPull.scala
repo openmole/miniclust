@@ -38,16 +38,30 @@ object JobPull:
   val virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()
 
   case class JobPullConfig(random: util.Random)
-  case class SubmittedJob(bucket: Bucket, id: String)
+
+  object ValidatedJob:
+    extension (v: ValidatedJob)
+      def id =
+        v match
+          case s: SubmittedJob => s.id
+          case i: InvalidJob => i.id
+
+      def bucket =
+        v match
+          case s: SubmittedJob => s.bucket
+          case i: InvalidJob => i.bucket
+
+
+
+  sealed trait ValidatedJob
+  case class SubmittedJob(bucket: Bucket, id: String, submitted: Message.Submitted) extends ValidatedJob
+  case class InvalidJob(bucket: Bucket, id: String, exception: Throwable) extends ValidatedJob
 
   object RunningJob:
-    def path(j: SubmittedJob | RunningJob) =
-      s"${MiniClust.Coordination.jobDirectory}/${RunningJob.name(j)}"
+    def path(bucket: String, id: String) =
+      s"${MiniClust.Coordination.jobDirectory}/${RunningJob.name(bucket, id)}"
 
-    def name(j: SubmittedJob | RunningJob) =
-      j match
-        case j: SubmittedJob => s"${j.bucket.name}-${j.id}"
-        case j: RunningJob => s"${j.bucketName}-${j.id}"
+    def name(bucket: String, id: String) = s"${bucket}-${id}"
 
     def parse(name: String, ping: Long): RunningJob =
       val index = name.indexOf('-')
@@ -55,10 +69,10 @@ object JobPull:
 
   case class RunningJob(bucketName: String, id: String, ping: Long)
 
-  def startHeartBeat(coordinationBucket: Bucket, run: Message.Submitted, job: SubmittedJob) =
-    val message = MiniClust.generateMessage(run)
+  def startHeartBeat(coordinationBucket: Bucket, job: SubmittedJob) =
+    val message = MiniClust.generateMessage(job.submitted)
     Cron.seconds(5): () =>
-      Minio.upload(coordinationBucket, message, JobPull.RunningJob.path(job), contentType = Some(Minio.jsonContentType))
+      Minio.upload(coordinationBucket, message, JobPull.RunningJob.path(job.bucket.name, job.id), contentType = Some(Minio.jsonContentType))
 
   def canceled(bucket: Bucket, id: String) =
     try
@@ -69,52 +83,53 @@ object JobPull:
     catch
       case e: FileNotFoundException => false
 
-  def submittedJobs(bucket: Bucket) =
-    val prefix = s"${MiniClust.User.submittedDirectory}/"
-    Minio.listObjects(bucket, prefix = prefix).map: i =>
-      SubmittedJob(bucket, i.objectName().drop(prefix.size))
 
   def runningJobs(coordinationBucket: Bucket) =
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
     Minio.listObjects(coordinationBucket, prefix = prefix).filterNot(_.isDir).map: i =>
       RunningJob.parse(i.objectName().drop(prefix.size), i.lastModified().toEpochSecond)
 
-  def selectJob(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): Option[SubmittedJob] =
+  def selectJob(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): Option[SubmittedJob | InvalidJob] =
     val runningJob = runningJobs(coordinationBucket)
     val runningByBucket = runningJob.groupBy(r => r.bucketName).view.mapValues(_.size).toMap
 
-    val submittedJob =
+    def userJobs(bucket: Bucket) =
+      val prefix = s"${MiniClust.User.submittedDirectory}/"
+      Minio.listObjects(bucket, prefix = prefix).map: i =>
+        (bucket, i.objectName().drop(prefix.size))
+
+    val allUserJobs =
       Minio.listUserBuckets(server).
         sortBy(b => runningByBucket.getOrElse(b.name, 0)).
-        map(submittedJobs).
+        map(userJobs).
         filterNot(_.isEmpty)
 
-    if submittedJob.isEmpty
-    then None
-    else
-      val u = submittedJob.head
-      Some(u(config.random.nextInt(u.size)))
+    allUserJobs.headOption.map: u =>
+      val (bucket, id) = u(config.random.nextInt(u.size))
+      validate(bucket, id) match
+        case Success(s) => SubmittedJob(bucket, id, s)
+        case Failure(e) => InvalidJob(bucket, id, e)
 
-  def validate(s: SubmittedJob) =
+  def validate(bucket: Bucket, id: String) =
     Try:
-      val content = Minio.content(s.bucket, MiniClust.User.submittedJob(s.id))
+      val content = Minio.content(bucket, MiniClust.User.submittedJob(id))
 
-      if Tool.hashString(content) != s.id then throw IllegalArgumentException(s"Invalid job id ${s.id}")
+      if Tool.hashString(content) != id then throw IllegalArgumentException(s"Invalid job id ${id}")
 
       val run =
         MiniClust.parseMessage(content) match
           case r: Message.Submitted => r
           case m => throw new IllegalArgumentException(s"Invalid message type ${m.getClass}, should be Run")
 
-      if run.account.bucket != s.bucket.name then throw IllegalArgumentException(s"Incorrect bucket name ${run.account.bucket}")
+      if run.account.bucket != bucket.name then throw IllegalArgumentException(s"Incorrect bucket name ${run.account.bucket}")
 
       run
 
-  def checkIn(coordinationBucket: Bucket, job: SubmittedJob): Boolean =
-    Minio.upload(coordinationBucket, job.id, RunningJob.path(job), overwrite = false, contentType = Some(Minio.jsonContentType))
+  def checkIn(coordinationBucket: Bucket, job: ValidatedJob): Boolean =
+    Minio.upload(coordinationBucket, job.id, RunningJob.path(job.bucket.name, job.id), overwrite = false, contentType = Some(Minio.jsonContentType))
 
-  def checkOut(coordinationBucket: Bucket, job: SubmittedJob): Unit =
-    Minio.delete(coordinationBucket, RunningJob.path(job))
+  def checkOut(coordinationBucket: Bucket, job: ValidatedJob): Unit =
+    Minio.delete(coordinationBucket, RunningJob.path(job.bucket.name, job.id))
 
   def removeAbandonedJobs(server: Minio.Server, coordinationBucket: Bucket) =
     val date = Minio.date(coordinationBucket.server)
@@ -139,35 +154,38 @@ object JobPull:
             contentType = Some(Minio.jsonContentType)
           )
 
-        Minio.delete(coordinationBucket, s"${RunningJob.path(j)}")
+        Minio.delete(coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
         logger.info(s"Removed job without heartbeat: ${j.id}")
 
 
-  def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): (SubmittedJob, Message.Submitted) =
+  def pull(server: Minio.Server, coordinationBucket: Bucket)(using config: JobPullConfig): SubmittedJob =
     val job = selectJob(server, coordinationBucket)
 
     job match
-      case Some(job) =>
+      case Some(job: InvalidJob) =>
         if checkIn(coordinationBucket, job)
         then
-          logger.info(s"${job.id}: checked in")
-          if !canceled(job.bucket, job.id)
-          then
-            validate(job) match
-              case Failure(exception) =>
-                logger.info(s"${job.id}: failed to validate, ${exception.getMessage}")
-                Minio.upload(job.bucket, MiniClust.generateMessage(Message.Failed(job.id, exception.getMessage, Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-                Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
-                pull(server, coordinationBucket)
-              case Success(run) =>
+          logger.info(s"${job.id}: failed to validate, ${job.exception.getMessage}")
+          Minio.upload(job.bucket, MiniClust.generateMessage(Message.Failed(job.id, job.exception.getMessage, Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+          Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
+          checkOut(coordinationBucket, job)
+
+        pull(server, coordinationBucket)
+      case Some(job: SubmittedJob) =>
+        checkIn(coordinationBucket, job) match
+          case true =>
+            logger.info(s"${job.id}: checked in")
+            if !canceled(job.bucket, job.id)
+            then
                 Minio.upload(job.bucket, MiniClust.generateMessage(Message.Running(job.id)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
                 Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
-                (job, run)
-          else
-            Minio.upload(job.bucket, MiniClust.generateMessage(Message.Canceled(job.id, true)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-            pull(server, coordinationBucket)
-        else pull(server, coordinationBucket)
+                job
+            else
+              Minio.upload(job.bucket, MiniClust.generateMessage(Message.Canceled(job.id, true)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+              checkOut(coordinationBucket, job)
+              pull(server, coordinationBucket)
+          case false => pull(server, coordinationBucket)
       case None =>
         Thread.sleep(config.random.nextInt(2000))
         pull(server, coordinationBucket)

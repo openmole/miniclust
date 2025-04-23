@@ -46,10 +46,10 @@ object Compute:
   case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
 
   def runJob(server: Minio.Server, coordinationBucket: Minio.Bucket)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache, Async.Spawn) =
-    val (job, run) = JobPull.pull(server, coordinationBucket)
-    val heartBeat = JobPull.startHeartBeat(coordinationBucket, run, job)
+    val job = JobPull.pull(server, coordinationBucket)
+    val heartBeat = JobPull.startHeartBeat(coordinationBucket, job)
     try
-      val msg = Compute.run(coordinationBucket, job, run)
+      val msg = Compute.run(coordinationBucket, job)
       logger.info(s"${job.id}: job successful")
       Minio.upload(job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
     finally heartBeat.stop()
@@ -159,8 +159,7 @@ object Compute:
 
   def run(
     coordinationBucket: Minio.Bucket,
-    job: SubmittedJob,
-    r: Message.Submitted)(using config: ComputeConfig, fileCache: FileCache) =
+    job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache) =
     createJobDirectory(job.id)
 
     try
@@ -176,7 +175,7 @@ object Compute:
         testCanceled()
 
         val usedCache =
-          try prepare(job.bucket, r, job.id)
+          try prepare(job.bucket, job.submitted, job.id)
           catch
              case e: Exception =>
                logger.info(s"${job.id}: error preparing files $e")
@@ -185,8 +184,8 @@ object Compute:
         try
           testCanceled()
 
-          val outputWriter = r.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
-          val errorWriter = r.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+          val outputWriter = job.submitted.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+          val errorWriter = job.submitted.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
 
           val exit =
             try
@@ -199,9 +198,9 @@ object Compute:
                   case None => System.err.println(line)
               )
 
-              logger.info(s"${job.id}: run ${r.command}")
+              logger.info(s"${job.id}: run ${job.submitted.command}")
 
-              val process = createProcess(job.id, r.command, processLogger)
+              val process = createProcess(job.id, job.submitted.command, processLogger)
               processDestroyer.add(process)
 
               while process.isAlive()
@@ -222,15 +221,15 @@ object Compute:
           if exit != 0
           then
             Async.blocking:
-              uploadOutput(job.bucket, r, job.id).awaitAll
+              uploadOutput(job.bucket, job.submitted, job.id).awaitAll
 
             boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
           Async.blocking:
-            uploadOutput(job.bucket, r, job.id).awaitAll
-            uploadOutputFiles(job.bucket, r, job.id).awaitAll
+            uploadOutput(job.bucket, job.submitted, job.id).awaitAll
+            uploadOutputFiles(job.bucket, job.submitted, job.id).awaitAll
         catch
           case e: Exception =>
             logger.info(s"${job.id}: error completing the job $e")

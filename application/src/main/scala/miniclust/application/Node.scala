@@ -43,6 +43,8 @@ import scala.util.hashing.MurmurHash3
   val seed = UUID.randomUUID().hashCode()
 
   val random = util.Random(seed)
+
+  JobPull.removeAbandonedJobs(server, coordinationBucket)
   Service.startBackgroud(server, coordinationBucket, fileCache, random)
 
   val pool = ComputingResource(cores)

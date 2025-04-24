@@ -41,4 +41,7 @@ object Service:
     random.shuffle(Minio.listUserBuckets(server)).take(1).foreach: b =>
       val oldStatus = Minio.listObjects(b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
       val oldOutputs = Minio.listObjects(b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
-      Minio.delete(b, (oldStatus ++ oldOutputs).map(_.objectName()) *)
+      val oldCancel = Minio.listObjects(b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
+
+      Minio.delete(b, (oldStatus ++ oldOutputs ++ oldCancel).map(_.objectName()) *)
+

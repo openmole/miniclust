@@ -34,8 +34,11 @@ object MiniClust:
     def jobDirectory = "job"
     def outputDirectory = s"${jobDirectory}/output"
 
-    def submittedDirectory = s"${jobDirectory}/submitted"
-    def submittedJob(id: String) = s"${submittedDirectory}/$id"
+    def submitDirectory = s"${jobDirectory}/submit"
+    def submittedJob(id: String) = s"${submitDirectory}/$id"
+
+    def cancelDirectory = s"${jobDirectory}/cancel"
+    def canceledJob(id: String) = s"${cancelDirectory}/$id"
 
     def statusDirectory = s"${jobDirectory}/status"
     def jobStatus(id: String) = s"${statusDirectory}/$id"

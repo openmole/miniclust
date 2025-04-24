@@ -93,7 +93,8 @@ def status(bucket: Minio.Bucket, id: String) =
   submitted.getOrElse(status.get)
 
 def cancel(bucket: Minio.Bucket, id: String) =
-  Minio.upload(bucket, MiniClust.generateMessage(Message.Canceled(id)), MiniClust.User.jobStatus(id), contentType = Some(Minio.jsonContentType))
+  Minio.upload(bucket, MiniClust.generateMessage(Message.Canceled(id)), MiniClust.User.canceledJob(id), contentType = Some(Minio.jsonContentType))
 
 def clean(bucket: Minio.Bucket, id: String) =
   Minio.deleteRecursive(bucket, MiniClust.User.jobOutputDirectory(id))
+  Minio.delete(bucket, MiniClust.User.jobStatus(id))

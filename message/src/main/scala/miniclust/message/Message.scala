@@ -37,6 +37,12 @@ object Message:
         case _: Failed | _: Completed | _: Canceled => true
         case _: Running | _: Submitted => false
 
+    def canceled =
+      m match
+        case _: Canceled => true
+        case _ => false
+
+
   object Version:
     given Message.Version = "1"
 

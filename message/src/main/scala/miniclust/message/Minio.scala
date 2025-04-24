@@ -35,7 +35,7 @@ object Minio:
 
   import io.minio.*
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 60, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 60, insecure: Boolean = false, connection: Option[Int] = Some(50))
   case class Bucket(server: Server, name: String)
 
   def withClient[T](server: Server)(f: MinioClient => T): T =
@@ -75,6 +75,10 @@ object Minio:
 
       builder.setHostnameVerifier$okhttp(hostnameVerifier)
       builder.sslSocketFactory(sslSocketFactory, trustAllCerts(0).asInstanceOf[X509TrustManager])
+
+    server.connection.foreach: connection =>
+      val pool = new ConnectionPool(connection, 5, TimeUnit.MINUTES)
+      builder.setConnectionPool$okhttp(pool)
 
     builder.build()
 

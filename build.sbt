@@ -27,6 +27,7 @@ lazy val compute = project
     libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.0",
     libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
     libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.0",
+    libraryDependencies += "org.apache.commons" % "commons-exec" % "1.4.0",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .dependsOn(message)

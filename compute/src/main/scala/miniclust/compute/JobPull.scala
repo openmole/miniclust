@@ -156,7 +156,7 @@ object JobPull:
       for
         j <- listOldJobs
       do
-        util.Try:
+        Background.run:
           Minio.upload(
             Bucket(server, j.bucketName),
             MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
@@ -164,9 +164,9 @@ object JobPull:
             contentType = Some(Minio.jsonContentType)
           )
 
-        Minio.delete(coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
+          Minio.delete(coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
-        logger.info(s"Removed job without heartbeat: ${j.id}")
+          logger.info(s"Removed job without heartbeat: ${j.id}")
 
 
 

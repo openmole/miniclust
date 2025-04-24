@@ -24,19 +24,17 @@ import better.files.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
+import org.apache.commons.io.output.NullOutputStream
 
+import java.io.PrintStream
 import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
 import java.util.logging.{Level, Logger}
 import java.nio.file.Files
 import java.util.concurrent.ExecutorService
-import scala.sys.process.*
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
-
-  val processDestroyer = new ProcessDestroyer
-
 
   object ComputeConfig:
     def apply(baseDirectory: File, cache: Int, sudo: Option[String] = None) =
@@ -68,7 +66,7 @@ object Compute:
           FileCache.setPermissions(file)
         else
           val tmpDirectory = File.newTemporaryDirectory()
-          if Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
+          if scala.sys.process.Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
           then
             tmpDirectory.delete(true)
             throw new InvalidParameterException(s"Error extracting the archive ${remote}, should be a tgz archive")
@@ -131,18 +129,19 @@ object Compute:
 
   def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
 
-  def createProcess(id: String, command: String, processLogger: ProcessLogger)(using config: ComputeConfig, label: boundary.Label[Message]) =
-    import scala.sys.process.*
-
+  def createProcess(id: String, command: String, out: java.io.OutputStream, err: java.io.OutputStream)(using config: ComputeConfig, label: boundary.Label[Message]): ProcessUtil.MyProcess =
     try
       config.sudo match
-        case None => Process(command, cwd = jobDirectory(id).toJava).run(processLogger)
+        case None =>
+          ProcessUtil.createProcess(Seq("bash", "-c", command), jobDirectory(id), out, err)
         case Some(sudo) =>
-          val p =
-            Process(s"sudo chown -R ${sudo} ${jobDirectory(id)}") #&&
-              Process(s"sudo -u ${sudo} -- ${command}", cwd = jobDirectory(id).toJava) #&&
-              Process(s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(id)}'")
-          p.run(processLogger)
+          val fullCommand =
+            Seq(
+              s"sudo chown -R $sudo ${jobDirectory(id)}",
+              s"sudo -u $sudo -- $command",
+              s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(id)}'").mkString(" && ")
+
+          ProcessUtil.createProcess(Seq("bash", "-c", fullCommand), jobDirectory(id), out, err)
     catch
       case e: Exception =>
         logger.info(s"${id}: error launching job execution $e")
@@ -176,35 +175,28 @@ object Compute:
         try
           testCanceled()
 
-          val outputWriter = job.submitted.stdOut.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
-          val errorWriter = job.submitted.stdErr.map(p => jobDirectory(job.id) / p).map(_.newPrintWriter())
+          val outputWriter = job.submitted.stdOut.map(p => jobDirectory(job.id) / p).map(_.newOutputStream()).getOrElse(NullOutputStream.INSTANCE)
+          val errorWriter = job.submitted.stdErr.map(p => jobDirectory(job.id) / p).map(_.newOutputStream()).getOrElse(NullOutputStream.INSTANCE)
 
           val exit =
             try
-              val processLogger = ProcessLogger(
-                line => outputWriter match
-                  case Some(writer) => writer.println(line)
-                  case None => println(line),
-                line => errorWriter match
-                  case Some(writer) => writer.println(line)
-                  case None => System.err.println(line)
-              )
-
               logger.info(s"${job.id}: run ${job.submitted.command}")
+              val process = createProcess(job.id, job.submitted.command, outputWriter, errorWriter)
 
-              val process = createProcess(job.id, job.submitted.command, processLogger)
-              processDestroyer.add(process)
-
-              while process.isAlive()
+              while process.isAlive
               do
-                testCanceled()
+                if JobPull.canceled(job.bucket, job.id)
+                then
+                  process.dispose()
+                  boundary.break(Message.Canceled(job.id, true))
+
                 Thread.sleep(10000)
 
-              try process.exitValue()
-              finally processDestroyer.remove(process)
+              process.dispose()
+              process.exitValue
             finally
-              outputWriter.foreach(_.close())
-              errorWriter.foreach(_.close())
+              outputWriter.close()
+              errorWriter.close()
 
           logger.info(s"${job.id}: complete job")
 
@@ -229,3 +221,51 @@ object Compute:
 
         Message.Completed(job.id)
       finally cleanJobDirectory(job.id)
+
+
+
+object ProcessUtil:
+  import org.apache.commons.exec.{PumpStreamHandler, ShutdownHookProcessDestroyer}
+  import java.io.PrintStream
+
+  val processDestroyer = new ShutdownHookProcessDestroyer
+
+  class MyProcess(process: Process, pump: PumpStreamHandler):
+    def isAlive: Boolean = process.isAlive
+    def dispose(): Unit =
+      try
+        def kill(p: ProcessHandle) = p.destroyForcibly()
+        process.descendants().forEach(kill)
+        kill(process.toHandle)
+        pump.stop()
+      finally
+        processDestroyer.remove(process)
+
+    def exitValue: Int = process.exitValue()
+
+  def createProcess(command: String | Seq[String], workDirectory: File, out: java.io.OutputStream, err: java.io.OutputStream): MyProcess =
+    val runtime = Runtime.getRuntime
+    import scala.jdk.CollectionConverters._
+
+    val p =
+      runtime.synchronized:
+        command match
+          case command: String =>
+            val inheritedEnvironment: Array[String] = System.getenv.asScala.map { case (key, value) => s"$key=$value" }.toArray
+            runtime.exec(
+              command,
+              inheritedEnvironment,
+              workDirectory.toJava
+            )
+          case command: Seq[String] =>
+            val builder = new ProcessBuilder(command*)
+            builder.directory(workDirectory.toJava)
+            builder.start()
+
+    val pump = new PumpStreamHandler(out, err)
+    pump.setProcessOutputStream(p.getInputStream)
+    pump.setProcessErrorStream(p.getErrorStream)
+
+    pump.start()
+    processDestroyer.add(p)
+    MyProcess(p, pump)

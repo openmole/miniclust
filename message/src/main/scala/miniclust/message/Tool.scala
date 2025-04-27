@@ -36,7 +36,7 @@ object Tool:
 
   def hashFile(input: File): String =
     val hasher = Blake3.initHash()
-    val buffer = Array.ofDim[Byte](64 * 1024 * 1024)
+    val buffer = Array.ofDim[Byte](64 * 1024)
     val is = FileInputStream(input)
     try
       var bytesRead = 0

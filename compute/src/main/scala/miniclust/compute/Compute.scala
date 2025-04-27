@@ -24,7 +24,6 @@ import better.files.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
-import org.apache.commons.io.output.NullOutputStream
 
 import java.io.PrintStream
 import java.security.InvalidParameterException
@@ -176,7 +175,6 @@ object Compute:
         try
           testCanceled()
 
-
           val exit =
             logger.info(s"${job.id}: run ${job.submitted.command}")
             val output = job.submitted.stdOut.map(p => jobDirectory(job.id) / p)
@@ -221,6 +219,8 @@ object Compute:
             boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.CompletionFailed))
 
         Message.Completed(job.id)
+      catch
+        case e: Exception => Message.Failed(job.id, e.getMessage, Message.Failed.Reason.UnexpectedError)
       finally cleanJobDirectory(job.id)
 
 
@@ -245,7 +245,6 @@ object ProcessUtil:
 
   def createProcess(command: Seq[String], workDirectory: File, out: Option[File], err: Option[File]): MyProcess =
     val runtime = Runtime.getRuntime
-    import scala.jdk.CollectionConverters._
 
     val builder = new ProcessBuilder(command*)
     builder.directory(workDirectory.toJava)

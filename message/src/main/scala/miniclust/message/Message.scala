@@ -54,7 +54,7 @@ object Message:
 
   object Failed:
     enum Reason:
-      case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed, TimeExhausted
+      case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed, TimeExhausted, UnexpectedError
 
   case class Submitted(
     account: Account,

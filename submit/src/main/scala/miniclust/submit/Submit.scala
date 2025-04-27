@@ -41,7 +41,8 @@ import scala.concurrent.duration.*
       Account(bucket.name),
       "ls",
       inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
-      stdOut = Some("output.txt")
+      stdOut = Some("output.txt"),
+      noise = "ea"
     )
 
   val id = submit(bucket, run)

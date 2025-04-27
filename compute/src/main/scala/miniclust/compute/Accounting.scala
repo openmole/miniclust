@@ -21,7 +21,7 @@ import java.time.Instant
 
 
 object Accounting:
-  case class Hour(hour: Long,quantity: Long)
+  case class Hour(hour: Long, consumedSeconds: Long)
   def currentHour = Instant.now().getEpochSecond / 3600
   def elapsedSeconds(t: Instant) = Instant.now().getEpochSecond - t.getEpochSecond
 
@@ -30,21 +30,21 @@ object Accounting:
       k -> v.filterNot(_.hour < expire)
     .filter(_._2.nonEmpty)
 
-class Accounting(expire: Int):
+class Accounting(expireAfterHour: Int):
   var accounts: Map[String, List[Accounting.Hour]] = Map()
 
-  def updateAccount(id: String, now: Long, quantity: Long) = synchronized:
+  def updateAccount(id: String, currentHour: Long, consumedSeconds: Long) = synchronized:
     val info = accounts.getOrElse(id, List[Accounting.Hour]())
     val newAccounting: List[Accounting.Hour] =
       info match
-        case head :: tail if head.hour == now => head.copy(quantity = head.quantity + quantity) :: tail
-        case _ => Accounting.Hour(now, quantity) :: info
+        case head :: tail if head.hour == currentHour => head.copy(consumedSeconds = head.consumedSeconds + consumedSeconds) :: tail
+        case _ => Accounting.Hour(currentHour, consumedSeconds) :: info
 
     accounts =
       Accounting.clean(
         accounts.updated(id, newAccounting),
-        now - expire
+        currentHour - expireAfterHour
       )
 
   def quantity(id: String) = synchronized:
-      accounts.getOrElse(id, List()).map(_.quantity).sum
+    accounts.getOrElse(id, List()).map(_.consumedSeconds).sum

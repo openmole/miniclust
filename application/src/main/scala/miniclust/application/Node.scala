@@ -48,6 +48,7 @@ import scala.util.hashing.MurmurHash3
   Service.startBackgroud(server, coordinationBucket, fileCache, random)
 
   val pool = ComputingResource(cores)
+  val accounting = Accounting(48)
 
   (0 until 10).map: i =>
     given Compute.ComputeConfig =
@@ -62,7 +63,7 @@ import scala.util.hashing.MurmurHash3
     Background.run:
       while true
       do
-        try JobPull.pullJob(server, coordinationBucket, pool)
+        try JobPull.pullJob(server, coordinationBucket, pool, accounting)
         catch
           case e: Exception =>
             Compute.logger.log(Level.SEVERE, "Error in run loop", e)

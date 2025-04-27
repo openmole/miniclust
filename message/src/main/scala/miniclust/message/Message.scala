@@ -28,7 +28,8 @@ case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.C
 case class OutputFile(local: String, remote: String)
 
 enum Resource:
-  case Core(n: Int)
+  case Core(core: Int)
+  case MaxTime(second: Int)
 
 object Message:
   extension (m: Message)
@@ -53,7 +54,7 @@ object Message:
 
   object Failed:
     enum Reason:
-      case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed
+      case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed, TimeExhausted
 
   case class Submitted(
     account: Account,

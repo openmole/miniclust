@@ -31,6 +31,7 @@ import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
 import java.util.logging.{Level, Logger}
 import java.nio.file.Files
+import java.time.Instant
 import java.util.concurrent.ExecutorService
 
 object Compute:
@@ -129,7 +130,7 @@ object Compute:
 
   def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
 
-  def createProcess(id: String, command: String, out: java.io.OutputStream, err: java.io.OutputStream)(using config: ComputeConfig, label: boundary.Label[Message]): ProcessUtil.MyProcess =
+  def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message]): ProcessUtil.MyProcess =
     try
       config.sudo match
         case None =>
@@ -175,28 +176,28 @@ object Compute:
         try
           testCanceled()
 
-          val outputWriter = job.submitted.stdOut.map(p => jobDirectory(job.id) / p).map(_.newOutputStream()).getOrElse(NullOutputStream.INSTANCE)
-          val errorWriter = job.submitted.stdErr.map(p => jobDirectory(job.id) / p).map(_.newOutputStream()).getOrElse(NullOutputStream.INSTANCE)
 
           val exit =
-            try
-              logger.info(s"${job.id}: run ${job.submitted.command}")
-              val process = createProcess(job.id, job.submitted.command, outputWriter, errorWriter)
+            logger.info(s"${job.id}: run ${job.submitted.command}")
+            val output = job.submitted.stdOut.map(p => jobDirectory(job.id) / p)
+            val error = job.submitted.stdErr.map(p => jobDirectory(job.id) / p)
+            val process = createProcess(job.id, job.submitted.command, output, error)
 
-              while process.isAlive
-              do
-                if JobPull.canceled(job.bucket, job.id)
-                then
-                  process.dispose()
-                  boundary.break(Message.Canceled(job.id, true))
+            while process.isAlive
+            do
+              if Instant.now().getEpochSecond > job.allocated.deadLine
+              then
+                boundary.break(Message.Failed(job.id, "Max time requested for the job has been exhausted", Message.Failed.Reason.TimeExhausted))
 
-                Thread.sleep(10000)
+              if JobPull.canceled(job.bucket, job.id)
+              then
+                process.dispose()
+                boundary.break(Message.Canceled(job.id, true))
 
-              process.dispose()
-              process.exitValue
-            finally
-              outputWriter.close()
-              errorWriter.close()
+              Thread.sleep(10000)
+
+            process.dispose()
+            process.exitValue
 
           logger.info(s"${job.id}: complete job")
 
@@ -230,42 +231,34 @@ object ProcessUtil:
 
   val processDestroyer = new ShutdownHookProcessDestroyer
 
-  class MyProcess(process: Process, pump: PumpStreamHandler):
+  class MyProcess(process: Process):
     def isAlive: Boolean = process.isAlive
     def dispose(): Unit =
       try
         def kill(p: ProcessHandle) = p.destroyForcibly()
         process.descendants().forEach(kill)
         kill(process.toHandle)
-        pump.stop()
       finally
         processDestroyer.remove(process)
 
     def exitValue: Int = process.exitValue()
 
-  def createProcess(command: String | Seq[String], workDirectory: File, out: java.io.OutputStream, err: java.io.OutputStream): MyProcess =
+  def createProcess(command: Seq[String], workDirectory: File, out: Option[File], err: Option[File]): MyProcess =
     val runtime = Runtime.getRuntime
     import scala.jdk.CollectionConverters._
 
-    val p =
-      runtime.synchronized:
-        command match
-          case command: String =>
-            val inheritedEnvironment: Array[String] = System.getenv.asScala.map { case (key, value) => s"$key=$value" }.toArray
-            runtime.exec(
-              command,
-              inheritedEnvironment,
-              workDirectory.toJava
-            )
-          case command: Seq[String] =>
-            val builder = new ProcessBuilder(command*)
-            builder.directory(workDirectory.toJava)
-            builder.start()
+    val builder = new ProcessBuilder(command*)
+    builder.directory(workDirectory.toJava)
 
-    val pump = new PumpStreamHandler(out, err)
-    pump.setProcessOutputStream(p.getInputStream)
-    pump.setProcessErrorStream(p.getErrorStream)
+    out match
+      case Some(f) => builder.redirectOutput(f.toJava)
+      case None => builder.redirectOutput(ProcessBuilder.Redirect.DISCARD)
 
-    pump.start()
+    err match
+      case Some(f) => builder.redirectError(f.toJava)
+      case None => builder.redirectError(ProcessBuilder.Redirect.DISCARD)
+
+    val p = builder.start()
+
     processDestroyer.add(p)
-    MyProcess(p, pump)
+    MyProcess(p)

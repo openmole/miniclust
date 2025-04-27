@@ -4,7 +4,7 @@ import miniclust.message.Minio.{Bucket, jsonContentType, listObjects}
 import miniclust.message.*
 
 import java.io.FileNotFoundException
-import java.time.{Duration, ZonedDateTime}
+import java.time.{Duration, Instant, ZonedDateTime}
 import java.util.concurrent.Executors
 import scala.util.*
 import gears.async.*
@@ -90,7 +90,7 @@ object JobPull:
     Minio.listObjects(coordinationBucket, prefix = prefix).filterNot(_.isDir).map: i =>
       RunningJob.parse(i.objectName().drop(prefix.size), i.lastModified().toEpochSecond)
 
-  def selectJob(server: Minio.Server, coordinationBucket: Bucket, pool: ComputingResource)(using config: JobPullConfig): SelectedJob | NotSelected =
+  def selectJob(server: Minio.Server, coordinationBucket: Bucket, pool: ComputingResource, accounting: Accounting)(using config: JobPullConfig): SelectedJob | NotSelected =
 //    val runningJob = runningJobs(coordinationBucket)
 //    val runningByBucket = runningJob.groupBy(r => r.bucketName).view.mapValues(_.size).toMap
 
@@ -100,7 +100,8 @@ object JobPull:
         (bucket, i.objectName().drop(prefix.length))
 
     val jobs =
-      config.random.shuffle(Minio.listUserBuckets(server)).view.map(userJobs).find(_.nonEmpty)
+      val buckets = Minio.listUserBuckets(server)
+      buckets.sortBy(b => accounting.quantity(b.name)).view.map(userJobs).find(_.nonEmpty)
 
 //    val allUserJobs =
 //      Minio.listUserBuckets(server).
@@ -113,8 +114,9 @@ object JobPull:
         val (bucket, id) = u(config.random.nextInt(u.size))
         validate(bucket, id) match
           case Success(s) =>
-            val cores = s.resource.collectFirst { case r: Resource.Core => r.n }.getOrElse(1)
-            ComputingResource.request(pool, cores) match
+            val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
+            val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
+            ComputingResource.request(pool, cores, time) match
               case Some(r) => SubmittedJob(bucket, id, s, r)
               case None => NotSelected.NotEnoughResource
           case Failure(e) => InvalidJob(bucket, id, e)
@@ -170,8 +172,8 @@ object JobPull:
 
 
 
-  @tailrec def pull(server: Minio.Server, coordinationBucket: Bucket, pool: ComputingResource)(using config: JobPullConfig): SubmittedJob =
-    val job = selectJob(server, coordinationBucket, pool)
+  @tailrec def pull(server: Minio.Server, coordinationBucket: Bucket, pool: ComputingResource, accounting: Accounting)(using config: JobPullConfig): SubmittedJob =
+    val job = selectJob(server, coordinationBucket, pool, accounting)
 
     job match
       case job: InvalidJob =>
@@ -182,7 +184,7 @@ object JobPull:
           Minio.delete(job.bucket, MiniClust.User.submittedJob(job.id))
           checkOut(coordinationBucket, job)
 
-        pull(server, coordinationBucket, pool)
+        pull(server, coordinationBucket, pool, accounting)
       case job: SubmittedJob =>
         def result =
           checkIn(coordinationBucket, job) match
@@ -204,17 +206,18 @@ object JobPull:
           case Some(j) => j
           case None =>
             ComputingResource.dispose(job.allocated)
-            pull(server, coordinationBucket, pool)
+            pull(server, coordinationBucket, pool, accounting)
 
       case NotSelected.NotFound | NotSelected.NotEnoughResource =>
         Thread.sleep(config.random.nextInt(10000))
-        pull(server, coordinationBucket, pool)
+        pull(server, coordinationBucket, pool, accounting)
 
 
-  def pullJob(server: Minio.Server, coordinationBucket: Minio.Bucket, pool: ComputingResource)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
-    val job = JobPull.pull(server, coordinationBucket, pool)
+  def pullJob(server: Minio.Server, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: Accounting)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
+    val job = JobPull.pull(server, coordinationBucket, pool, accounting)
     val heartBeat = JobPull.startHeartBeat(coordinationBucket, job)
     Background.run:
+      val start = Instant.now()
       try
         logger.info(s"${job.id}: running")
         val msg = Compute.run(coordinationBucket, job)
@@ -226,4 +229,6 @@ object JobPull:
       finally
         ComputingResource.dispose(job.allocated)
         heartBeat.stop()
+        accounting.updateAccount(job.bucket.name, Accounting.currentHour, Accounting.elapsedSeconds(start))
+
       JobPull.checkOut(coordinationBucket, job)

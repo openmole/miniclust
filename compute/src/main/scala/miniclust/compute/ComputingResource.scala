@@ -1,5 +1,7 @@
 package miniclust.compute
 
+import java.time.Instant
+
 /*
  * Copyright (C) 2025 Romain Reuillon
  *
@@ -21,19 +23,19 @@ object ComputingResource:
 
   def apply(core: Int) = new ComputingResource(core)
 
-  case class Allocated(pool: ComputingResource, core: Int)
+  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long)
   def dispose(a: Allocated): Unit =
     a.pool.synchronized:
       a.pool.core += a.core
 
-  def request(pool: ComputingResource, core: Int) =
+  def request(pool: ComputingResource, core: Int, time: Option[Int]) =
     pool.synchronized:
       if pool.core >= core
       then
         pool.core -= core
-        Some(Allocated(pool, core))
+        Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime)))
       else None
 
 
-case class ComputingResource(private var core: Int)
+case class ComputingResource(private var core: Int, defaultTime: Int = 3600)
 

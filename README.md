@@ -161,7 +161,7 @@ helm upgrade -f values.yaml minio minio/minio  -n minio
 
 Change the fields password in:
 
-``yaml
+```yaml
 apiVersion: v1
 kind: Namespace
 metadata:

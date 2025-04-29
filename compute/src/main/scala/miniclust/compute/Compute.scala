@@ -265,7 +265,7 @@ object ProcessUtil:
           case None => s"bash -c '$killAll' -- ${process.pid()}"
 
       import scala.sys.process.*
-      logger.info(s"Killing process $killCommand")
+      logger.info(s"Killing process ${process.pid()}")
       killCommand.run()
 
     def exitValue: Int = process.exitValue()

@@ -87,7 +87,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerBaseImage := "openjdk:24-slim",
-  Universal / javaOptions ++= Seq("-J-Xmx256m")
+  Universal / javaOptions ++= Seq("-J-Xmx512m")
 )
 
 

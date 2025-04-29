@@ -239,6 +239,9 @@ object ProcessUtil:
           """
              |kill_tree() {
              |  local pid="$1"
+             |  if ! ps -p "$pid" > /dev/null; then
+             |    return
+             |  fi
              |  for child in $(pgrep -P "$pid"); do
              |    kill_tree "$child"
              |  done

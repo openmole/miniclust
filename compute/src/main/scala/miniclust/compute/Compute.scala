@@ -133,7 +133,7 @@ object Compute:
     try
       config.sudo match
         case None =>
-          ProcessUtil.createProcess(Seq("bash", "-c", command), jobDirectory(id), out, err)
+          ProcessUtil.createProcess(Seq("bash", "-c", command), jobDirectory(id), out, err, config.sudo)
         case Some(sudo) =>
           val fullCommand =
             Seq(
@@ -141,7 +141,7 @@ object Compute:
               s"sudo -u $sudo -- $command",
               s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(id)}'").mkString(" && ")
 
-          ProcessUtil.createProcess(Seq("bash", "-c", fullCommand), jobDirectory(id), out, err)
+          ProcessUtil.createProcess(Seq("bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
     catch
       case e: Exception =>
         logger.info(s"${id}: error launching job execution $e")
@@ -226,24 +226,48 @@ object Compute:
 
 
 object ProcessUtil:
-  import org.apache.commons.exec.{PumpStreamHandler, ShutdownHookProcessDestroyer}
   import java.io.PrintStream
+  import scala.jdk.CollectionConverters.*
 
-  val processDestroyer = new ShutdownHookProcessDestroyer
+  val logger = Logger.getLogger(getClass.getName)
 
-  class MyProcess(process: Process):
+  class MyProcess(process: Process, user: Option[String]):
     def isAlive: Boolean = process.isAlive
     def dispose(): Unit =
-      try
-        def kill(p: ProcessHandle) = p.destroyForcibly()
-        process.descendants().forEach(kill)
-        kill(process.toHandle)
-      finally
-        processDestroyer.remove(process)
+      val killCommand =
+        val killAll =
+          """
+             |kill_tree() {
+             |  local pid="$1"
+             |  for child in $(pgrep -P "$pid"); do
+             |    kill_tree "$child"
+             |  done
+             |  kill -SIGTERM "$pid"
+             |  local timeout=30
+             |  local elapsed=0
+             |  while ps -p "$pid" > /dev/null; do
+             |    if [ "$elapsed" -ge "$timeout" ]; then
+             |      kill -SIGKILL "$pid"
+             |      break
+             |    fi
+             |    sleep 1
+             |    ((elapsed++))
+             |  done
+             |}
+             |
+             |kill_tree "$1"
+             |"""".stripMargin
+        user match
+          case Some(user) => s"sudo -u $user bash -c '$killAll' -- ${process.pid()}"
+          case None => s"bash -c '$killAll' -- ${process.pid()}"
+
+      import scala.sys.process.*
+      logger.info(s"Killing process $killCommand")
+      killCommand.run()
 
     def exitValue: Int = process.exitValue()
 
-  def createProcess(command: Seq[String], workDirectory: File, out: Option[File], err: Option[File]): MyProcess =
+  def createProcess(command: Seq[String], workDirectory: File, out: Option[File], err: Option[File], user: Option[String]): MyProcess =
     val runtime = Runtime.getRuntime
 
     val builder = new ProcessBuilder(command*)
@@ -258,6 +282,4 @@ object ProcessUtil:
       case None => builder.redirectError(ProcessBuilder.Redirect.DISCARD)
 
     val p = builder.start()
-
-    processDestroyer.add(p)
-    MyProcess(p)
+    MyProcess(p, user)

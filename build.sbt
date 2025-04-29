@@ -27,7 +27,6 @@ lazy val compute = project
     libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.0",
     libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
     libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.0",
-    libraryDependencies += "org.apache.commons" % "commons-exec" % "1.4.0",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .dependsOn(message)
@@ -71,7 +70,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
       Cmd("RUN",
         """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
           |apt-get update && \
-          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo && \
+          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps&& \
           |apt-get install -y singularity-container && \
           |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
           |mkdir -p /lib/modules && \
@@ -88,7 +87,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerBaseImage := "openjdk:24-slim",
-  Universal / javaOptions ++= Seq("-J-Xmx512m")
+  Universal / javaOptions ++= Seq("-J-Xmx256m")
 )
 
 

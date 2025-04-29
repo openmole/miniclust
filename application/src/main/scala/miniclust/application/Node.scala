@@ -7,7 +7,7 @@ import miniclust.compute.*
 import miniclust.message.{MiniClust, Minio}
 
 import java.util.UUID
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, Semaphore}
 import java.util.logging.*
 import scala.util.hashing.MurmurHash3
 
@@ -68,3 +68,7 @@ import scala.util.hashing.MurmurHash3
           case e: Exception =>
             Compute.logger.log(Level.SEVERE, "Error in run loop", e)
 
+  val finished = Semaphore(0)
+  scala.sys.addShutdownHook:
+    finished.release()
+  finished.acquire()

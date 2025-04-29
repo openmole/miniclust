@@ -221,7 +221,7 @@ object JobPull:
       try
         logger.info(s"${job.id}: running")
         val msg = Compute.run(coordinationBucket, job)
-        logger.info(s"${job.id}: job successful")
+        logger.info(s"${job.id}: job finished ${msg}")
 
         Minio.upload(job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 

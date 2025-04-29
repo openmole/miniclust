@@ -19,7 +19,6 @@ package miniclust.message
 
 import io.circe.*
 import io.circe.syntax.*
-import io.circe.generic.auto.*
 
 object MiniClust:
   type Hash = String

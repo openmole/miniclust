@@ -17,21 +17,16 @@ package miniclust.message
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-case class Account(bucket: String)
 
-object InputFile:
-  object Cache:
-    given Conversion[String, Cache] = s => Cache(s)
-  case class Cache(hash: String, extract: Boolean = false)
+import io.circe.derivation
 
-case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.Cache] = None)
-case class OutputFile(local: String, remote: String)
-
-enum Resource:
-  case Core(core: Int)
-  case MaxTime(second: Int)
 
 object Message:
+  import io.circe.*
+
+  given derivation.Configuration = derivation.Configuration.default.withDiscriminator("type").withDefaults.withKebabCaseMemberNames.withKebabCaseConstructorNames
+  given Codec[Message] = derivation.ConfiguredCodec.derived[Message]
+
   extension (m: Message)
     def finished =
       m match
@@ -53,7 +48,7 @@ object Message:
   opaque type Version = String
 
   object Failed:
-    enum Reason:
+    enum Reason derives derivation.ConfiguredCodec:
       case Abandoned, Invalid, PreparationFailed, ExecutionFailed, CompletionFailed, TimeExhausted, UnexpectedError
 
   case class Submitted(
@@ -71,6 +66,23 @@ object Message:
   case class Running(id: String) extends Message
   case class Canceled(id: String, canceled: Boolean = false) extends Message
 
+  case class Account(bucket: String) derives derivation.ConfiguredCodec
+
+  object InputFile:
+    object Cache:
+      given Conversion[String, Cache] = s => Cache(s)
+
+    case class Cache(hash: String, extract: Boolean = false) derives derivation.ConfiguredCodec
+
+  case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.Cache] = None) derives derivation.ConfiguredCodec
+
+  case class OutputFile(local: String, remote: String) derives derivation.ConfiguredCodec
+
+  enum Resource derives derivation.ConfiguredCodec:
+    case Core(core: Int)
+    case MaxTime(second: Int)
+
 
 sealed trait Message
 
+export Message.{Account, InputFile, OutputFile, Resource}

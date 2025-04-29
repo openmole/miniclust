@@ -19,10 +19,14 @@ package miniclust.compute
 
 
 import io.circe.yaml
+import io.circe.derivation
 import io.circe.generic.auto.*
 import better.files.*
 
 object Configuration:
+
+  given derivation.Configuration = derivation.Configuration.default.withDefaults.withKebabCaseMemberNames.withKebabCaseConstructorNames
+
   def read(file: File): Configuration =
     yaml.parser.parse(file.contentAsString).toTry.get.as[Configuration].toTry.get
 
@@ -30,13 +34,13 @@ object Configuration:
     url: String,
     user: String,
     password: String,
-    insecure: Boolean = false)
+    insecure: Boolean = false) derives derivation.ConfiguredCodec
 
   case class Compute(
     workDirectory: String,
     cache: Int,
-    sudo: Option[String])
+    sudo: Option[String]) derives derivation.ConfiguredCodec
 
 case class Configuration(
   minio: Configuration.Minio,
-  compute: Configuration.Compute)
+  compute: Configuration.Compute) derives derivation.ConfiguredCodec

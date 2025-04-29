@@ -2,7 +2,8 @@
 
 A simple batch computing system, composed of worker coordinated via a central vanilla minio server.
 
-The following instructions propose a full deployment on K3S
+Miniclust can be deployed by installing and minio server and one or several computing nodes pulling jobs from this server.
+But it might be convenient to install it on top of K3S. Here are the instructions.
 
 ### Prerequisites
 

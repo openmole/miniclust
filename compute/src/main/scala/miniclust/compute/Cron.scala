@@ -39,26 +39,41 @@ object Cron:
   val scheduler = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory)
   given ExecutionContext = ExecutionContext.fromExecutor(Executors.newVirtualThreadPerTaskExecutor())
 
-  class StopTask(var delay: Option[Int]):
-    def stop() =
-      synchronized:
-        delay = None
+
+  object StopTask:
+    case class CombinedStopTask(tasks: Seq[StopTask]):
+      def stop() = tasks.foreach(_.stop())
+
+    class UnitStopTask(var delay: Option[Int]) extends StopTask:
+      def stop() =
+        synchronized:
+          delay = None
+
+    def combine(tasks: StopTask*) = CombinedStopTask(tasks)
+
+  sealed trait StopTask:
+    def stop(): Unit
 
   def seconds(delay: Int, fail: Boolean = false)(task: () => Unit): StopTask =
-    val stopTask = StopTask(Some(delay))
+    val stopTask = StopTask.UnitStopTask(Some(delay))
 
-    val scheduledTask = new Runnable:
-      override def run(): Unit =
-        Future:
-          stopTask.synchronized:
-            if stopTask.delay.isDefined
-            then task()
-        .onComplete:
-          case Success(_) =>
-            stopTask.delay.foreach: w =>
-              seconds(w, fail)(task)
-          case Failure(_) => if !fail then seconds(delay, fail)(task)
+    def schedule(): Unit =
+      val scheduledTask = new Runnable:
+        override def run(): Unit =
+          Future:
+            stopTask.synchronized:
+              if stopTask.delay.isDefined
+              then task()
+          .onComplete:
+            case Success(_) =>
+              stopTask.delay.foreach: w =>
+                schedule()
+            case Failure(_) =>
+              if !fail
+              then schedule()
 
-    scheduler.schedule(scheduledTask, delay, TimeUnit.SECONDS)
+      scheduler.schedule(scheduledTask, delay, TimeUnit.SECONDS)
+
+    schedule()
     stopTask
 

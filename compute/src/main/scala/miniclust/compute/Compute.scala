@@ -48,11 +48,11 @@ object Compute:
 
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
-  def prepare(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
+  def prepare(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
     def createCache(file: File, remote: String, providedHash: String, extract: Boolean = false) =
       val tmp = File.newTemporaryFile()
       try
-        Minio.download(bucket, remote, tmp.toJava)
+        Minio.download(minio, bucket, remote, tmp.toJava)
         val hash = Tool.hashFile(tmp.toJava)
 
         if hash != providedHash
@@ -85,7 +85,7 @@ object Compute:
               val local = jobDirectory(id) / input.local
               input.cacheKey match
                 case None =>
-                  Minio.download(bucket, input.remote, local.toJava)
+                  Minio.download(minio, bucket, input.remote, local.toJava)
                   None
                 case Some(cache) =>
                   Some:
@@ -106,22 +106,22 @@ object Compute:
     else successValues.flatten
 
 
-  def uploadOutput(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
+  def uploadOutput(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
     (r.stdOut ++ r.stdErr).toSeq.map: o =>
       Future:
         val local = jobDirectory(id) / o
         if !local.exists
         then throw new InvalidParameterException(s"Standard output file $o does not exist")
-        Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
+        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
 
-  def uploadOutputFiles(bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
+  def uploadOutputFiles(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
     r.outputFile.map: output =>
       Future:
         val local = jobDirectory(id) / output.local
         if !local.exists
         then throw new InvalidParameterException(s"Output file ${output.local} does not exist")
         logger.info(s"${id}: upload file ${local} to ${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
-        Minio.upload(bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
+        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
 
   def createJobDirectory(id: String)(using config: ComputeConfig) =
     jobDirectory(id).delete(true)
@@ -149,6 +149,7 @@ object Compute:
 
 
   def run(
+    minio: Minio,
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache) =
     createJobDirectory(job.id)
@@ -160,13 +161,13 @@ object Compute:
         logger.info(s"${job.id}: preparing files")
 
         def testCanceled(): Unit =
-          if JobPull.canceled(job.bucket, job.id)
+          if JobPull.canceled(minio, job.bucket, job.id)
           then boundary.break(Message.Canceled(job.id, true))
 
         testCanceled()
 
         val usedCache =
-          try prepare(job.bucket, job.submitted, job.id)
+          try prepare(minio, job.bucket, job.submitted, job.id)
           catch
              case e: Exception =>
                logger.info(s"${job.id}: error preparing files $e")
@@ -187,7 +188,7 @@ object Compute:
               then
                 boundary.break(Message.Failed(job.id, "Max time requested for the job has been exhausted", Message.Failed.Reason.TimeExhausted))
 
-              if JobPull.canceled(job.bucket, job.id)
+              if JobPull.canceled(minio, job.bucket, job.id)
               then
                 process.dispose()
                 boundary.break(Message.Canceled(job.id, true))
@@ -204,15 +205,15 @@ object Compute:
           if exit != 0
           then
             Async.blocking:
-              uploadOutput(job.bucket, job.submitted, job.id).awaitAll
+              uploadOutput(minio, job.bucket, job.submitted, job.id).awaitAll
 
             boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
           Async.blocking:
-            uploadOutput(job.bucket, job.submitted, job.id).awaitAll
-            uploadOutputFiles(job.bucket, job.submitted, job.id).awaitAll
+            uploadOutput(minio, job.bucket, job.submitted, job.id).awaitAll
+            uploadOutputFiles(minio, job.bucket, job.submitted, job.id).awaitAll
         catch
           case e: Exception =>
             logger.info(s"${job.id}: error completing the job $e")

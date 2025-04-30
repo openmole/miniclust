@@ -39,13 +39,15 @@ import scala.util.hashing.MurmurHash3
   given fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
 
   val server = Minio.Server(configuration.minio.url, configuration.minio.user, configuration.minio.password, insecure = configuration.minio.insecure)
-  val coordinationBucket = Minio.bucket(server, MiniClust.Coordination.bucketName)
+
+  val minio = Minio(server)
+  val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
   val seed = UUID.randomUUID().hashCode()
 
   val random = util.Random(seed)
 
-  JobPull.removeAbandonedJobs(server, coordinationBucket)
-  Service.startBackgroud(server, coordinationBucket, fileCache, random)
+  JobPull.removeAbandonedJobs(minio, coordinationBucket)
+  val services = Service.startBackgroud(minio, coordinationBucket, fileCache, random)
 
   val pool = ComputingResource(cores)
   val accounting = Accounting(48)
@@ -63,7 +65,7 @@ import scala.util.hashing.MurmurHash3
     Background.run:
       while true
       do
-        try JobPull.pullJob(server, coordinationBucket, pool, accounting)
+        try JobPull.pullJob(minio, coordinationBucket, pool, accounting)
         catch
           case e: Exception =>
             Compute.logger.log(Level.SEVERE, "Error in run loop", e)
@@ -72,3 +74,6 @@ import scala.util.hashing.MurmurHash3
   scala.sys.addShutdownHook:
     finished.release()
   finished.acquire()
+
+  services.stop()
+  minio.close()

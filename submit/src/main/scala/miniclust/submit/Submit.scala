@@ -27,37 +27,41 @@ import scala.concurrent.duration.*
 @main def run(url: String, user: String, password: String) =
   val server = Minio.Server(url, user, password, insecure = true)
 
-  val bucket = Minio.userBucket(server, user)
+  val minio = Minio(server)
+  try
+    val bucket = Minio.userBucket(minio, user)
 
-  val testFile = new java.io.File("/tmp/test.txt")
-  val writer = new java.io.PrintWriter(testFile)
-  writer.write("youpi")
-  writer.close()
+    val testFile = new java.io.File("/tmp/test.txt")
+    val writer = new java.io.PrintWriter(testFile)
+    writer.write("youpi")
+    writer.close()
 
-  Minio.upload(bucket, testFile, "test.txt")
+    Minio.upload(minio, bucket, testFile, "test.txt")
 
-  val run =
-    Message.Submitted(
-      Account(bucket.name),
-      "ls",
-      inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
-      stdOut = Some("output.txt"),
-      noise = "ea"
-    )
+    val run =
+      Message.Submitted(
+        Account(bucket.name),
+        "ls",
+        inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
+        stdOut = Some("output.txt"),
+        noise = "ea"
+      )
 
-  val id = submit(bucket, run)
+    val id = submit(minio, bucket, run)
 
-  var s: Message = run
-  while
-    s = status(bucket, id)
-    !s.finished
-  do
+    var s: Message = run
+    while
+      s = status(minio, bucket, id)
+      !s.finished
+    do
+      println(s)
+      Thread.sleep(1000)
+
     println(s)
-    Thread.sleep(1000)
-
-  println(s)
-  println(Minio.content(bucket, MiniClust.User.jobOutputPath(id, "output.txt")))
-  clean(bucket, id)
+    println(Minio.content(minio, bucket, MiniClust.User.jobOutputPath(id, "output.txt")))
+    clean(minio, bucket, id)
+  finally
+    minio.close()
 
 //
 //  val futs = Future.sequence:
@@ -73,29 +77,29 @@ import scala.concurrent.duration.*
 
 import scala.util.*
 
-def submit(bucket: Minio.Bucket, run: Message.Submitted) =
+def submit(minio: Minio, bucket: Minio.Bucket, run: Message.Submitted) =
   val content = MiniClust.generateMessage(run)
   val id = Tool.hashString(content)
-  Minio.upload(bucket, content, MiniClust.User.submittedJob(id), contentType = Some(Minio.jsonContentType))
+  Minio.upload(minio, bucket, content, MiniClust.User.submittedJob(id), contentType = Some(Minio.jsonContentType))
   id
 
-def status(bucket: Minio.Bucket, id: String) =
+def status(minio: Minio, bucket: Minio.Bucket, id: String) =
   def submitted =
     Try:
-      val content = Minio.content(bucket, MiniClust.User.submittedJob(id))
+      val content = Minio.content(minio, bucket, MiniClust.User.submittedJob(id))
       MiniClust.parseMessage(content)
     .toOption
 
   def status =
     Try:
-      val content = Minio.content(bucket, MiniClust.User.jobStatus(id))
+      val content = Minio.content(minio, bucket, MiniClust.User.jobStatus(id))
       MiniClust.parseMessage(content)
 
   submitted.getOrElse(status.get)
 
-def cancel(bucket: Minio.Bucket, id: String) =
-  Minio.upload(bucket, MiniClust.generateMessage(Message.Canceled(id)), MiniClust.User.canceledJob(id), contentType = Some(Minio.jsonContentType))
+def cancel(minio: Minio, bucket: Minio.Bucket, id: String) =
+  Minio.upload(minio, bucket, MiniClust.generateMessage(Message.Canceled(id)), MiniClust.User.canceledJob(id), contentType = Some(Minio.jsonContentType))
 
-def clean(bucket: Minio.Bucket, id: String) =
-  Minio.deleteRecursive(bucket, MiniClust.User.jobOutputDirectory(id))
-  Minio.delete(bucket, MiniClust.User.jobStatus(id))
+def clean(minio: Minio, bucket: Minio.Bucket, id: String) =
+  Minio.deleteRecursive(minio, bucket, MiniClust.User.jobOutputDirectory(id))
+  Minio.delete(minio, bucket, MiniClust.User.jobStatus(id))

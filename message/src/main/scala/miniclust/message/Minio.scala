@@ -1,5 +1,6 @@
 package miniclust.message
 
+import io.minio.MinioClient
 import io.minio.errors.*
 import io.minio.messages.*
 
@@ -35,15 +36,27 @@ object Minio:
 
   import io.minio.*
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 60, insecure: Boolean = false, connection: Option[Int] = Some(50))
-  case class Bucket(server: Server, name: String)
+  case class Server(url: String, user: String, password: String, timeout: Int = 60, insecure: Boolean = false)
+  case class Bucket(name: String)
 
-  def withClient[T](server: Server)(f: MinioClient => T): T =
-    val c = client(server)
+  def apply(server: Server) =
+    new Minio(server)
+    //val (c, minio) = client(server)
+    //new Minio(minio, server, c)
+
+  def withClient[T](minio: Minio)(f: MinioClient => T): T =
+    val c = client(minio.server, httpClient(minio.server))
     try f(c)
     finally c.close()
+//    val c = client(minio.server)
+//    try f(c._2)
+//    finally c._2.close()
 
-  def httpClient(server: Server) =
+  private def closeHttpClient(httpClient: OkHttpClient) =
+    httpClient.dispatcher().executorService().shutdown()
+    httpClient.connectionPool().evictAll()
+
+  private def httpClient(server: Server) =
     val builder =
       new OkHttpClient.Builder()
         .connectTimeout(server.timeout, TimeUnit.SECONDS)
@@ -72,35 +85,38 @@ object Minio:
         new HostnameVerifier:
           override def verify(hostname: String, session: SSLSession): Boolean = true
 
-
       builder.setHostnameVerifier$okhttp(hostnameVerifier)
       builder.sslSocketFactory(sslSocketFactory, trustAllCerts(0).asInstanceOf[X509TrustManager])
 
-    server.connection.foreach: connection =>
-      val pool = new ConnectionPool(connection, 5, TimeUnit.MINUTES)
-      builder.setConnectionPool$okhttp(pool)
+//    val pool = new ConnectionPool(1, 5, TimeUnit.MINUTES)
+//    builder.setConnectionPool$okhttp(pool)
 
     builder.build()
 
-  def client(server: Server) =
-    MinioClient.builder()
-      .endpoint(server.url)
-      .credentials(server.user, server.password)
-      .httpClient(httpClient(server))
-      .build()
+  private def client(server: Server, http: OkHttpClient) =
+    //val client = httpClient(server)
+    val minio =
+      MinioClient.builder()
+        .endpoint(server.url)
+        .credentials(server.user, server.password)
+        .httpClient(http, true)
+        .build()
+    minio
 
-  def bucket(server: Server, name: String, create: Boolean = true) =
-    withClient(server): c =>
-      if create
-      then
-        try c.makeBucket(MakeBucketArgs.builder().bucket(name).build())
-        catch
-          case e: ErrorResponseException if e.errorResponse().code() == "BucketAlreadyOwnedByYou" =>
-      Bucket(server, name)
+  def bucket(minio: Minio, name: String, create: Boolean = true) =
+    if create
+    then
+      try
+        withClient(minio): client =>
+          client.makeBucket(MakeBucketArgs.builder().bucket(name).build())
+      catch
+        case e: ErrorResponseException if e.errorResponse().code() == "BucketAlreadyOwnedByYou" =>
+
+    Bucket(name)
 
 
-  def userBucket(server: Server, login: String, create: Boolean = true) =
-    withClient(server): c =>
+  def userBucket(minio: Minio, login: String, create: Boolean = true) =
+    withClient(minio): c =>
       if create
       then
         try c.makeBucket(MakeBucketArgs.builder().bucket(login).build())
@@ -112,31 +128,38 @@ object Minio:
       c.listBuckets().asScala.filter: bucket =>
         val tags = c.getBucketTags(GetBucketTagsArgs.builder().bucket(bucket.name()).build()).get
         tags.asScala.toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
-      .map(b => Bucket(server, b.name())).headOption.getOrElse:
+      .map(b => Bucket(b.name())).headOption.getOrElse:
         throw java.util.NoSuchElementException(s"Cannot get or create a bucket for user ${login}, tagged with tag ${MiniClust.User.submitBucketTag}")
 
-  def listUserBuckets(server: Server): Seq[Bucket] =
-    withClient(server): c =>
+  def listUserBuckets(minio: Minio): Seq[Bucket] =
+    withClient(minio): c =>
       c.listBuckets().asScala.filter: bucket =>
         val tags = c.getBucketTags(
           GetBucketTagsArgs.builder().bucket(bucket.name()).build()
         ).get
         tags.asScala.toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
-      .map(b => Bucket(server, b.name())).toSeq
+      .map(b => Bucket(b.name())).toSeq
 
 
-  def delete(bucket: Bucket, path: String*): Unit =
-    withClient(bucket.server): c =>
+
+  def deleteAll(minio: Minio, bucket: Bucket, path: String*): Unit =
+    withClient(minio): c =>
       val objects = path.map(p => io.minio.messages.DeleteObject(p))
+      for
+        i <- c.removeObjects(RemoveObjectsArgs.builder().bucket(bucket.name).objects(objects.asJava).build()).asScala
+      do ()
+
+  def delete(minio: Minio, bucket: Bucket, path: String): Unit =
+    withClient(minio): c =>
+      c.removeObject(RemoveObjectArgs.builder().bucket(bucket.name).`object`(path).build())
+
+  def deleteRecursive(minio: Minio, bucket: Bucket, path: String): Unit =
+    withClient(minio): c =>
+      val objects = listObjects(minio, bucket, path, recursive = true).map(o => io.minio.messages.DeleteObject(o.objectName()))
       c.removeObjects(RemoveObjectsArgs.builder().bucket(bucket.name).objects(objects.asJava).build()).asScala.toSeq
 
-  def deleteRecursive(bucket: Bucket, path: String): Unit =
-    withClient(bucket.server): c =>
-      val objects = listObjects(bucket, path, recursive = true).map(o => io.minio.messages.DeleteObject(o.objectName()))
-      c.removeObjects(RemoveObjectsArgs.builder().bucket(bucket.name).objects(objects.asJava).build()).asScala.toSeq
-
-  def download(bucket: Bucket, path: String, local: File) =
-    withClient(bucket.server): c =>
+  def download(minio: Minio, bucket: Bucket, path: String, local: File) =
+    withClient(minio): c =>
       try
         val stream = c.getObject(GetObjectArgs.builder().bucket(bucket.name).`object`(path).build())
         try
@@ -149,8 +172,8 @@ object Minio:
         case e: ErrorResponseException if e.errorResponse().code() == "NoSuchKey" => throw FileNotFoundException(s"File ${path} not found in bucket ${bucket.name}")
 
 
-  def content(bucket: Bucket, path: String): String =
-    withClient(bucket.server): c =>
+  def content(minio: Minio, bucket: Bucket, path: String): String =
+    withClient(minio): c =>
       try
         val stream = c.getObject(GetObjectArgs.builder().bucket(bucket.name).`object`(path).build())
         try scala.io.Source.fromInputStream(stream).mkString
@@ -159,12 +182,12 @@ object Minio:
         case e: ErrorResponseException if e.errorResponse().code() == "NoSuchKey" => throw FileNotFoundException(s"File ${path} not found in bucket ${bucket.name}")
 
 
-  def upload(bucket: Bucket, local: File | String, path: String, tags: Seq[(String, String)] = Seq(), overwrite: Boolean = true, contentType: Option[String] = None): Boolean =
-    val headers =
-      if !overwrite then Map("If-None-Match" -> "*").asJava else Map().asJava
+  def upload(minio: Minio, bucket: Bucket, local: File | String, path: String, tags: Seq[(String, String)] = Seq(), overwrite: Boolean = true, contentType: Option[String] = None): Boolean =
+    withClient(minio): c =>
+      val headers =
+        if !overwrite then Map("If-None-Match" -> "*").asJava else Map().asJava
 
-    try
-      withClient(bucket.server): c =>
+      try
         local match
           case local: File =>
             val arg =
@@ -183,27 +206,27 @@ object Minio:
 
               contentType.foreach(arg.contentType)
               c.putObject(arg.headers(headers).build())
-      true
-    catch
-      case e: ErrorResponseException if !overwrite && e.errorResponse().code() == "PreconditionFailed" => false
+        true
+      catch
+        case e: ErrorResponseException if !overwrite && e.errorResponse().code() == "PreconditionFailed" => false
 
 
-  def listObjects(bucket: Bucket, prefix: String, recursive: Boolean = false) =
-    withClient(bucket.server): c =>
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false) =
+    withClient(minio): c =>
       c.listObjects(
         ListObjectsArgs.builder().bucket(bucket.name).prefix(prefix).recursive(recursive).build()
       ).asScala.toSeq.map: i =>
         i.get()
 
-  def lazyListObjects[T](bucket: Bucket, prefix: String, recursive: Boolean = false)(f: Iterable[Result[Item]] => T): T =
-    withClient(bucket.server): c =>
+  def lazyListObjects[T](minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false)(f: Iterable[Result[Item]] => T): T =
+    withClient(minio): c =>
       f:
         c.listObjects(
           ListObjectsArgs.builder().bucket(bucket.name).prefix(prefix).recursive(recursive).build()
         ).asScala
 
-  def exists(bucket: Bucket, prefix: String) =
-    withClient(bucket.server): c =>
+  def exists(minio: Minio, bucket: Bucket, prefix: String) =
+    withClient(minio): c =>
       try
         c.statObject(
           StatObjectArgs.builder().bucket(bucket.name).`object`(prefix).build()
@@ -212,17 +235,23 @@ object Minio:
       catch
         case e: ErrorResponseException if e.errorResponse().code() == "NoSuchKey" => false
 
-  def date(server: Server) =
-    val client = httpClient(server)
+  def date(minio: Minio) =
     val request = new Request.Builder()
-      .url(server.url)
+      .url(minio.server.url)
       .head()
       .build()
 
-    val response = client.newCall(request).execute()
-
+    val client = httpClient(minio.server)
     try
-      val dateHeader = response.header("Date")
-      val formatter = DateTimeFormatter.RFC_1123_DATE_TIME;
-      ZonedDateTime.parse(dateHeader, formatter).toEpochSecond
-    finally response.close()
+      val response = client.newCall(request).execute()
+
+      try
+        val dateHeader = response.header("Date")
+        val formatter = DateTimeFormatter.RFC_1123_DATE_TIME
+        ZonedDateTime.parse(dateHeader, formatter).toEpochSecond
+      finally response.close()
+    finally closeHttpClient(client)
+
+
+case class Minio(server: Minio.Server):
+  def close() = () //httpClient.connectionPool().close()

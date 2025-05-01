@@ -156,7 +156,7 @@ object JobPull:
         it.view.flatMap: i =>
           val o = i.get()
           if o.isDir
-          then Some(Directory(o.objectName()))
+          then None //Some(Directory(o.objectName()))
           else
             val j = RunningJob.parse(o.objectName().drop(prefix.length), Option(o.lastModified()).map(_.toEpochSecond).getOrElse(0))
             if (date - j.ping) > 60
@@ -167,8 +167,8 @@ object JobPull:
         j <- listOldJobs
       do
         j match
-          case d: Directory =>
-            Minio.delete(minio, coordinationBucket, d.path)
+//          case d: Directory =>
+//            Minio.delete(minio, coordinationBucket, d.path)
           case j: RunningJob =>
             Minio.upload(
               minio,

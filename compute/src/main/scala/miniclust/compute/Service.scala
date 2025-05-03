@@ -43,9 +43,9 @@ object Service:
     def tooOld(d: Long) = (date - d) > old
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
-      val oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
-      val oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
-      val oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified().toEpochSecond))
+      val oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
+      val oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
+      val oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
 
-      Minio.deleteAll(minio, b, (oldStatus ++ oldOutputs ++ oldCancel).map(_.objectName()) *)
+      Minio.delete(minio, b, (oldStatus ++ oldOutputs ++ oldCancel).map(_.name) *)
 

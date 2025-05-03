@@ -87,8 +87,8 @@ object JobPull:
 
   def runningJobs(minio: Minio, coordinationBucket: Bucket) =
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
-    Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.isDir).map: i =>
-      RunningJob.parse(i.objectName().drop(prefix.size), i.lastModified().toEpochSecond)
+    Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
+      RunningJob.parse(i.name.drop(prefix.size), i.lastModified.get)
 
   def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: Accounting)(using config: JobPullConfig): SelectedJob | NotSelected =
 //    val runningJob = runningJobs(coordinationBucket)
@@ -97,7 +97,7 @@ object JobPull:
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
       Minio.listObjects(minio, bucket, prefix = prefix).map: i =>
-        (bucket, i.objectName().drop(prefix.length))
+        (bucket, i.name.drop(prefix.length))
 
     val jobs =
       val buckets = Minio.listUserBuckets(minio)
@@ -151,36 +151,34 @@ object JobPull:
 
     case class Directory(path: String)
 
-    Minio.lazyListObjects(minio, coordinationBucket, prefix = prefix): it =>
-      def listOldJobs =
-        it.view.flatMap: i =>
-          val o = i.get()
-          if o.isDir
-          then None //Some(Directory(o.objectName()))
-          else
-            val j = RunningJob.parse(o.objectName().drop(prefix.length), Option(o.lastModified()).map(_.toEpochSecond).getOrElse(0))
-            if (date - j.ping) > 60
-            then Some(j)
-            else None
+    val oldJobs =
+      Minio.listObjects(minio, coordinationBucket, prefix = prefix).view.flatMap: i =>
+        if i.dir
+        then None //Some(Directory(o.objectName()))
+        else
+          val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
+          if (date - j.ping) > 60
+          then Some(j)
+          else None
 
-      for
-        j <- listOldJobs
-      do
-        j match
+    for
+      j <- oldJobs
+    do
+      j match
 //          case d: Directory =>
 //            Minio.delete(minio, coordinationBucket, d.path)
-          case j: RunningJob =>
-            Minio.upload(
-              minio,
-              Bucket(j.bucketName),
-              MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
-              MiniClust.User.jobStatus(j.id),
-              contentType = Some(Minio.jsonContentType)
-            )
+        case j: RunningJob =>
+          Minio.upload(
+            minio,
+            Bucket(j.bucketName),
+            MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
+            MiniClust.User.jobStatus(j.id),
+            contentType = Some(Minio.jsonContentType)
+          )
 
-            Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
+          Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
-            logger.info(s"Removed job without heartbeat: ${j.id}")
+          logger.info(s"Removed job without heartbeat: ${j.id}")
 
 
 

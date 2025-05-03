@@ -36,7 +36,8 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
-    libraryDependencies += "io.minio" % "minio" % "8.5.17",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.31.35",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.31.35",
     libraryDependencies += "commons-codec" % "commons-codec" % "1.18.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,

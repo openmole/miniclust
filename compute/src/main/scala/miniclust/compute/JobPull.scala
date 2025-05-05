@@ -66,10 +66,10 @@ object JobPull:
     def path(bucket: String, id: String) =
       s"${MiniClust.Coordination.jobDirectory}/${RunningJob.name(bucket, id)}"
 
-    def name(bucket: String, id: String) = s"${bucket}-${id}"
+    def name(bucket: String, id: String) = s"${bucket}/${id}"
 
     def parse(name: String, ping: Long): RunningJob =
-      val index = name.indexOf('-')
+      val index = name.indexOf('/')
       RunningJob(bucketName = name.take(index), id = name.drop(index + 1), ping = ping)
 
   case class RunningJob(bucketName: String, id: String, ping: Long)
@@ -96,7 +96,7 @@ object JobPull:
 
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
-      Minio.listObjects(minio, bucket, prefix = prefix).map: i =>
+      Minio.listObjects(minio, bucket, prefix = prefix, recursive = true).map: i =>
         (bucket, i.name.drop(prefix.length))
 
     val jobs =

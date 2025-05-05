@@ -23,7 +23,7 @@ import org.apache.http.client.methods.HttpHead
 
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.nio.charset.StandardCharsets
-import java.time.ZonedDateTime
+import java.time.{Duration, ZonedDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters.*
@@ -61,7 +61,7 @@ import software.amazon.awssdk.utils.AttributeMap
 object Minio:
   def jsonContentType = "application/json"
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 600, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 20, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =
@@ -81,12 +81,16 @@ object Minio:
     httpClient.close()
 
   private def httpClient(server: Server) =
+    val builder =
+      ApacheHttpClient.builder().
+        connectionTimeout(Duration.ofSeconds(server.timeout)).
+        socketTimeout(Duration.ofSeconds(server.timeout))
+
     if server.insecure
     then
-
       val attributes = AttributeMap.builder().put(SdkHttpConfigurationOption.TRUST_ALL_CERTIFICATES, true).build()
-      ApacheHttpClient.builder().buildWithDefaults(attributes)
-    else ApacheHttpClient.builder().build()
+      builder.buildWithDefaults(attributes)
+    else builder.build()
 
   private def client(server: Server) =
     val c = httpClient(server)

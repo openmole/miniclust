@@ -49,7 +49,7 @@ lazy val documentation = project
   .enablePlugins(MdocPlugin)
   .settings(
     mdocIn := sourceDirectory.value / "main/docs",
-    mdocOut := baseDirectory.value.getParentFile,
+    mdocOut := baseDirectory.value / "content",
     name := "documentation",
     mdocVariables := Map(
       "VERSION" -> version.value

@@ -238,6 +238,6 @@ object JobPull:
         if msg.canceled then JobPull.clearCancel(minio, job.bucket, job.id)
       finally
         ComputingResource.dispose(job.allocated)
-        accounting.updateAccount(job.bucket.name, Accounting.currentHour, Accounting.elapsedSeconds(start))
+        accounting.updateAccount(job.bucket.name, Accounting.currentHour, Accounting.elapsedSeconds(start) * job.allocated.core)
         heartBeat.stop()
         JobPull.checkOut(minio, coordinationBucket, job)

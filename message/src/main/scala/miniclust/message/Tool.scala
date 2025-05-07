@@ -17,8 +17,13 @@ package miniclust.message
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import io.circe.derivation
 import org.apache.commons.codec.digest.*
+import software.amazon.awssdk.http.{HttpExecuteRequest, SdkHttpMethod, SdkHttpRequest}
+import software.amazon.awssdk.http.apache.ApacheHttpClient
+
 import java.io.*
+import java.time.Duration
 
 object Tool:
 
@@ -32,7 +37,6 @@ object Tool:
     if i == -1
     then ("", hash)
     else (hash.take(i), hash.drop(i + 1))
-
 
   def hashFile(input: File): String =
     val hasher = Blake3.initHash()
@@ -48,3 +52,30 @@ object Tool:
 
     val hash = hasher.doFinalize(32)
     s"blake3:${hash.map("%02x".format(_)).mkString}"
+
+  def jsonConfiguration =
+    derivation.Configuration.default.withDiscriminator("type").withDefaults.withKebabCaseMemberNames.withKebabCaseConstructorNames
+
+  def queryExternalIP: Option[String] =
+    val client =
+      ApacheHttpClient.builder().
+        connectionTimeout(Duration.ofSeconds(20)).
+        socketTimeout(Duration.ofSeconds(20)).build()
+
+    try
+      util.Try:
+        val httpRequest =
+          HttpExecuteRequest.builder().request:
+            SdkHttpRequest.builder()
+              .uri(java.net.URI.create("http://checkip.amazonaws.com"))
+              .method(SdkHttpMethod.GET)
+              .build()
+          .build()
+
+        val response = client.prepareRequest(httpRequest).call()
+        val entity =
+          response.responseBody().get().readAllBytes()
+        String(entity).takeWhile(_ != '\n')
+      .toOption
+    finally
+      client.close()

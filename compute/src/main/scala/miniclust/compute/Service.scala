@@ -19,12 +19,13 @@ package miniclust.compute
 
 import miniclust.compute.Cron.StopTask
 import miniclust.message.*
+import miniclust.message.MiniClust.WorkerActivity
 
 import scala.util.Random
 
 object Service:
 
-  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, random: Random) =
+  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, random: Random) =
     val old = 7 * 60 * 60 * 24
     val removeRandom = Random(random.nextLong)
     val s1 =
@@ -36,7 +37,11 @@ object Service:
     val s3 =
       Cron.seconds(60): () =>
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
-    StopTask.combine(s1, s2, s3)
+    val s4 =
+      Cron.seconds(60): () =>
+        MiniClust.WorkerActivity.publish(minio, coordinationBucket, activity)
+
+    StopTask.combine(s1, s2, s3, s4)
 
   def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, old: Int, random: Random) =
     val date = Minio.date(minio)

@@ -20,13 +20,18 @@ package miniclust.message
 import io.circe.*
 import io.circe.syntax.*
 
+import java.util.UUID
+
 object MiniClust:
   type Hash = String
 
   object Coordination:
     def bucketName = "miniclust"
     def jobDirectory = "job"
-  //def jobFile(id: String) = s"$jobDirectory/$id"
+    def workerDirectory = "worker"
+    def workerActivity = s"$workerDirectory/activity"
+
+    def activityFile(id: String) = s"$workerActivity/${id}"
 
   object User:
     def submitBucketTag = ("miniclust", "submit")
@@ -58,3 +63,15 @@ object MiniClust:
 
   def jobId(run: Message.Submitted) = Tool.hashString(generateMessage(run))
 
+  object WorkerActivity:
+    given derivation.Configuration = Tool.jsonConfiguration
+    given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived[WorkerActivity]
+
+    def apply(cores: Int) =
+      new WorkerActivity(cores, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString)
+
+    def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
+      val content = activity.asJson.noSpaces
+      Minio.upload(minio, coordinationBucket, content, Coordination.activityFile(activity.identifier))
+
+  case class WorkerActivity(cores: Int, ip: String, identifier: String)

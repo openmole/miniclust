@@ -29,51 +29,74 @@ import scala.util.hashing.MurmurHash3
  */
 
 
-@main def run(configurationFile: String) =
-  val cores = Runtime.getRuntime.availableProcessors()
 
-  val configuration = Configuration.read(File(configurationFile))
-  val baseDirectory = File(configuration.compute.workDirectory)
-  baseDirectory.createDirectories()
+@main def run(args: String*) =
+  case class Args(
+    configurationFile: Option[File] = None)
 
-  given fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
+  import scopt.OParser
+  val builder = OParser.builder[Args]
+  val parser1 =
+    import builder.*
+    OParser.sequence(
+      programName("miniclust"),
+      opt[String]("config")
+        .action((x, c) => c.copy(configurationFile = Some(File(x))))
+        .text("Configuration file")
+    )
 
-  val server = Minio.Server(configuration.minio.url, configuration.minio.user, configuration.minio.password, insecure = configuration.minio.insecure)
+  OParser.parse(parser1, args, Args()) match
+    case Some(config) =>
+      val configuration = Configuration.read(config.configurationFile.get)
 
-  val minio = Minio(server)
-  val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
-  val seed = UUID.randomUUID().hashCode()
+      val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
+      val activity = MiniClust.WorkerActivity(cores)
 
-  val random = util.Random(seed)
 
-  JobPull.removeAbandonedJobs(minio, coordinationBucket)
-  val services = Service.startBackgroud(minio, coordinationBucket, fileCache, random)
+      val baseDirectory = File(configuration.compute.workDirectory)
+      baseDirectory.createDirectories()
 
-  val pool = ComputingResource(cores)
-  val accounting = Accounting(48)
+      given fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
 
-  (0 until 10).map: i =>
-    given Compute.ComputeConfig =
-      Compute.ComputeConfig(
-        baseDirectory = File(configuration.compute.workDirectory) / i.toString,
-        cache = configuration.compute.cache,
-        sudo = configuration.compute.sudo
-      )
+      val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
 
-    given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
+      val minio = Minio(server)
+      val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
+      val seed = UUID.randomUUID().hashCode()
 
-    Background.run:
-      while true
-      do
-        try JobPull.pullJob(minio, coordinationBucket, pool, accounting)
-        catch
-          case e: Exception =>
-            Compute.logger.log(Level.SEVERE, "Error in run loop", e)
+      val random = util.Random(seed)
 
-  val finished = Semaphore(0)
-  scala.sys.addShutdownHook:
-    finished.release()
-  finished.acquire()
+      JobPull.removeAbandonedJobs(minio, coordinationBucket)
+      val services = Service.startBackgroud(minio, coordinationBucket, fileCache, activity, random)
 
-  services.stop()
-  minio.close()
+      val pool = ComputingResource(cores)
+      val accounting = Accounting(48)
+
+      (0 until 10).map: i =>
+        given Compute.ComputeConfig =
+          Compute.ComputeConfig(
+            baseDirectory = File(configuration.compute.workDirectory) / i.toString,
+            cache = configuration.compute.cache,
+            sudo = configuration.compute.sudo
+          )
+
+        given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
+
+        Background.run:
+          while true
+          do
+            try JobPull.pullJob(minio, coordinationBucket, pool, accounting)
+            catch
+              case e: Exception =>
+                Compute.logger.log(Level.SEVERE, "Error in run loop", e)
+
+      val finished = Semaphore(0)
+      scala.sys.addShutdownHook:
+        finished.release()
+      finished.acquire()
+
+      services.stop()
+      minio.close()
+
+    case _ =>
+

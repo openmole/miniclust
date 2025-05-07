@@ -24,7 +24,7 @@ import io.circe.derivation
 object Message:
   import io.circe.*
 
-  given derivation.Configuration = derivation.Configuration.default.withDiscriminator("type").withDefaults.withKebabCaseMemberNames.withKebabCaseConstructorNames
+  given derivation.Configuration = Tool.jsonConfiguration
   given Codec[Message] = derivation.ConfiguredCodec.derived[Message]
 
   extension (m: Message)

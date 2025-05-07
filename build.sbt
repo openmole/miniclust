@@ -74,6 +74,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 //      ++ doMapping((cssFile in client in target).value, s"$prefix/webapp/css/")
 //      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
 
+  libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0",
   Docker / daemonUser := "miniclust",
   dockerCommands :=
     {
@@ -101,6 +102,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   },
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
+  dockerUpdateLatest := true,
   dockerBaseImage := "openjdk:24-slim",
   Universal / javaOptions ++= Seq("-J-Xmx400m")
 )

@@ -32,14 +32,15 @@ object Configuration:
 
   case class Minio(
     url: String,
-    user: String,
-    password: String,
+    key: String,
+    secret: String,
     insecure: Boolean = false) derives derivation.ConfiguredCodec
 
   case class Compute(
     workDirectory: String,
     cache: Int,
-    sudo: Option[String]) derives derivation.ConfiguredCodec
+    sudo: Option[String],
+    cores: Option[Int]) derives derivation.ConfiguredCodec
 
 case class Configuration(
   minio: Configuration.Minio,

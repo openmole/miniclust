@@ -28,7 +28,8 @@ import scala.util.hashing.MurmurHash3
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+object Node:
+  val logger = Logger.getLogger(getClass.getName)
 
 @main def run(args: String*) =
   case class Args(
@@ -50,8 +51,9 @@ import scala.util.hashing.MurmurHash3
       val configuration = Configuration.read(config.configurationFile.get)
 
       val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
-      val activity = MiniClust.WorkerActivity(cores)
+      Node.logger.info(s"Using ${cores} cores")
 
+      val activity = MiniClust.WorkerActivity(cores)
 
       val baseDirectory = File(configuration.compute.workDirectory)
       baseDirectory.createDirectories()
@@ -77,7 +79,7 @@ import scala.util.hashing.MurmurHash3
           Compute.ComputeConfig(
             baseDirectory = File(configuration.compute.workDirectory) / i.toString,
             cache = configuration.compute.cache,
-            sudo = configuration.compute.sudo
+            sudo = configuration.compute.user orElse configuration.compute.sudo
           )
 
         given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))

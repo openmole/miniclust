@@ -39,6 +39,7 @@ object Configuration:
   case class Compute(
     workDirectory: String,
     cache: Int,
+    user: Option[String],
     sudo: Option[String],
     cores: Option[Int]) derives derivation.ConfiguredCodec
 

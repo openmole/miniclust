@@ -76,6 +76,8 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 //      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
 
   libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0",
+  libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
+  libraryDependencies += "org.slf4j" % "slf4j-nop" % "2.0.17",
   Docker / daemonUser := "miniclust",
   dockerCommands :=
     {

@@ -51,8 +51,6 @@ object Node:
       val configuration = Configuration.read(config.configurationFile.get)
 
       val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
-      Node.logger.info(s"Using ${cores} cores")
-
       val activity = MiniClust.WorkerActivity(cores)
 
       val baseDirectory = File(configuration.compute.workDirectory)
@@ -91,6 +89,8 @@ object Node:
             catch
               case e: Exception =>
                 Compute.logger.log(Level.SEVERE, "Error in run loop", e)
+
+      Node.logger.info(s"Worker is running, pulling jobs, resources: ${cores} cores")
 
       val finished = Semaphore(0)
       scala.sys.addShutdownHook:

@@ -44,6 +44,20 @@ lazy val message = project
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
 
+lazy val documentation = project
+  .in(file("documentation"))
+  .enablePlugins(MdocPlugin)
+  .settings(
+    mdocIn := sourceDirectory.value / "main/docs",
+    mdocOut := baseDirectory.value.getParentFile,
+    name := "documentation",
+    mdocVariables := Map(
+      "VERSION" -> version.value
+    ),
+    libraryDependencies += "com.softwaremill.sttp.apispec" %% "jsonschema-circe" % "0.11.9",
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.11.25"
+  ) dependsOn message
+
 //val prefix = "/opt/docker/application/"
 lazy val application = project.in(file("application")) dependsOn(compute) enablePlugins (JavaServerAppPackaging) settings(
   //  daemonUserUid in Docker := None,
@@ -88,7 +102,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerBaseImage := "openjdk:24-slim",
-  Universal / javaOptions ++= Seq("-J-Xmx512m")
+  Universal / javaOptions ++= Seq("-J-Xmx400m")
 )
 
 

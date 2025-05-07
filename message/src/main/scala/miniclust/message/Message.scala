@@ -66,6 +66,9 @@ object Message:
   case class Running(id: String) extends Message
   case class Canceled(id: String, canceled: Boolean = false) extends Message
 
+  object Account:
+    given Conversion[String, Account] = s => Account(s)
+
   case class Account(bucket: String) derives derivation.ConfiguredCodec
 
   object InputFile:

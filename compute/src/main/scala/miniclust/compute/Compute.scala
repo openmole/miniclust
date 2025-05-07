@@ -106,13 +106,13 @@ object Compute:
     else successValues.flatten
 
 
-  def uploadOutput(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
-    (r.stdOut ++ r.stdErr).toSeq.map: o =>
+  def uploadOutput(minio: Minio, bucket: Minio.Bucket, id: String, output: Option[(String, File)], error: Option[(String, File)])(using config: ComputeConfig, s: Async.Spawn) =
+    (output ++ error).toSeq.map: o =>
       Future:
-        val local = jobDirectory(id) / o
+        val local = o._2
         if !local.exists
         then throw new InvalidParameterException(s"Standard output file $o does not exist")
-        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o}")
+        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o._1}")
 
   def uploadOutputFiles(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
     r.outputFile.map: output =>
@@ -173,14 +173,15 @@ object Compute:
                logger.info(s"${job.id}: error preparing files $e")
                boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
 
+        val output = job.submitted.stdOut.map(p => p -> jobDirectory(job.id) / "__output__")
+        val error = job.submitted.stdErr.map(p => p -> jobDirectory(job.id) / "__error__")
+
         try
           testCanceled()
 
           val exit =
             logger.info(s"${job.id}: run ${job.submitted.command}")
-            val output = job.submitted.stdOut.map(p => jobDirectory(job.id) / p)
-            val error = job.submitted.stdErr.map(p => jobDirectory(job.id) / p)
-            val process = createProcess(job.id, job.submitted.command, output, error)
+            val process = createProcess(job.id, job.submitted.command, output.map(_._2), error.map(_._2))
 
             while process.isAlive
             do
@@ -205,14 +206,14 @@ object Compute:
           if exit != 0
           then
             Async.blocking:
-              uploadOutput(minio, job.bucket, job.submitted, job.id).awaitAll
+              uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
 
             boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
           Async.blocking:
-            uploadOutput(minio, job.bucket, job.submitted, job.id).awaitAll
+            uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
             uploadOutputFiles(minio, job.bucket, job.submitted, job.id).awaitAll
         catch
           case e: Exception =>

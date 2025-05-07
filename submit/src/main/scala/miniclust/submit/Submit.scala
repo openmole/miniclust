@@ -40,7 +40,7 @@ import scala.concurrent.duration.*
 
     val run =
       Message.Submitted(
-        Account(bucket.name),
+        user,
         "ls",
         inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
         stdOut = Some("output.txt"),

@@ -52,7 +52,8 @@ lazy val documentation = project
     mdocOut := baseDirectory.value / "content",
     name := "documentation",
     mdocVariables := Map(
-      "VERSION" -> version.value
+      "VERSION" -> version.value,
+      "SCALA_VERSION" -> scalaVersion.value,
     ),
     libraryDependencies += "com.softwaremill.sttp.apispec" %% "jsonschema-circe" % "0.11.9",
     libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.11.25"

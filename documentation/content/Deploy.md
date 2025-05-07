@@ -1,4 +1,55 @@
-## Deploy Miniclust
+# Deploy Miniclust
+
+## Existing Minio server
+
+You need to have 2 policies: 
+ - one for the worker nodes that should be able to write in all user submission buckets and in the coordination bucket (call miniclust by default)
+ - one for the users that should be able to use or create if does not exist a buket tagged with the tag: miniclust:submit
+
+Here are a very permissive version of these 2 policies, aimed for minio servers dedicated to a single minclust cluster.
+
+The worker policy:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:*"
+            ],
+            "Resource": [
+                "arn:aws:s3:::*"
+            ]
+        }
+    ]
+}
+```
+
+The user policy:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:*"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${aws:username}",
+        "arn:aws:s3:::${aws:username}/*"
+      ]
+    }
+  ]
+}
+```
+
+You can now create a worker account / API key, with the worker policy and make workers join your cluster. For that you can use this [docker compose](https://github.com/openmole/miniclust-worker).
+
+You can then create users with the user policy to let them submit jobs.
+
+## On K3S
 
 ### Prerequisites
 

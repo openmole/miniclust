@@ -1,6 +1,6 @@
 # MiniClust
 
-MiniClust is a simple batch computing system, composed of worker coordinated via a central vanilla minio server.
+MiniClust is a lightweight batch computing system, composed of worker coordinated via a central vanilla minio server.
 One or several workers pull jobs described in JSON files from the Minio server, and coordinate by writing file on the server.
 
 The functionalities of MiniClust:

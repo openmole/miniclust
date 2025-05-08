@@ -53,6 +53,22 @@ And run it as:
 scala run /tmp/example.sc -- https://url login password
 ```
 
+
+To cache a file on the execution nodes you can define you can specify it in the InputFile class:
+```scala
+  val myFile = new java.io.File("/tmp/myfile")
+  Minio.upload(minio, bucket, myFile, "file/myFile")
+
+  val run =
+    Message.Submitted(
+      Account(bucket.name),
+      "ls -la",
+      inputFile = Seq(InputFile("file/myFile", "myFile", cacheKey = Some(Tool.hashFile(myFile))))
+    )
+```
+
+The file will be put in the cache of the worker a reused for subsequent execution. The cache key must be the blake3 hash of the file (`blake3:hashvalue`).
+
 ## Using another language
 
 MiniClust works by exchanging json files through the central minio server.

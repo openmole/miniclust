@@ -51,7 +51,7 @@ object Node:
       val configuration = Configuration.read(config.configurationFile.get)
 
       val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
-      val activity = MiniClust.WorkerActivity(cores)
+      val activity = MiniClust.WorkerActivity(cores, configuration.minio.key)
 
       val baseDirectory = File(configuration.compute.workDirectory)
       baseDirectory.createDirectories()

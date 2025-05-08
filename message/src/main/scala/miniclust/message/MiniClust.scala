@@ -67,11 +67,11 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived[WorkerActivity]
 
-    def apply(cores: Int) =
-      new WorkerActivity(cores, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString)
+    def apply(cores: Int, key: String) =
+      new WorkerActivity(cores, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString, key)
 
     def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
       val content = activity.asJson.noSpaces
       Minio.upload(minio, coordinationBucket, content, Coordination.activityFile(activity.identifier))
 
-  case class WorkerActivity(cores: Int, ip: String, identifier: String)
+  case class WorkerActivity(cores: Int, ip: String, identifier: String, key: String)

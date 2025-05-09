@@ -41,6 +41,7 @@ lazy val message = project
     libraryDependencies += "commons-codec" % "commons-codec" % "1.18.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
+    libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.3",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
 

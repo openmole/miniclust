@@ -70,7 +70,7 @@ object Node:
       val services = Service.startBackgroud(minio, coordinationBucket, fileCache, activity, random)
 
       val pool = ComputingResource(cores)
-      val accounting = Accounting(48)
+      val accounting = UsageHistory(48)
 
       (0 until 10).map: i =>
         given Compute.ComputeConfig =
@@ -85,7 +85,7 @@ object Node:
         Background.run:
           while true
           do
-            try JobPull.pullJob(minio, coordinationBucket, pool, accounting)
+            try JobPull.pullJob(minio, coordinationBucket, pool, accounting, activity.identifier)
             catch
               case e: Exception =>
                 Compute.logger.log(Level.SEVERE, "Error in run loop", e)

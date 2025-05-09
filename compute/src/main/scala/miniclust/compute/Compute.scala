@@ -129,7 +129,7 @@ object Compute:
 
   def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
 
-  def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message]): ProcessUtil.MyProcess =
+  def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
     try
       config.sudo match
         case None =>
@@ -157,7 +157,7 @@ object Compute:
     try
       import scala.sys.process.*
 
-      boundary[Message]:
+      boundary[Message.FinalState]:
         logger.info(s"${job.id}: preparing files")
 
         def testCanceled(): Unit =

@@ -66,6 +66,8 @@ object Message:
   case class Running(id: String) extends Message
   case class Canceled(id: String, canceled: Boolean = false) extends Message
 
+  type FinalState = Canceled | Failed | Completed
+
   object Account:
     given Conversion[String, Account] = s => Account(s)
 

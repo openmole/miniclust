@@ -20,28 +20,28 @@ import java.time.Instant
  */
 
 
-object Accounting:
+object UsageHistory:
   case class Hour(hour: Long, consumedSeconds: Long)
   def currentHour = Instant.now().getEpochSecond / 3600
   def elapsedSeconds(t: Instant) = Instant.now().getEpochSecond - t.getEpochSecond
 
-  def clean(map: Map[String, List[Accounting.Hour]], expire: Long) =
+  def clean(map: Map[String, List[UsageHistory.Hour]], expire: Long) =
     map.map: (k, v) =>
       k -> v.filterNot(_.hour < expire)
     .filter(_._2.nonEmpty)
 
-class Accounting(expireAfterHour: Int):
-  var accounts: Map[String, List[Accounting.Hour]] = Map()
+class UsageHistory(expireAfterHour: Int):
+  var accounts: Map[String, List[UsageHistory.Hour]] = Map()
 
   def updateAccount(id: String, currentHour: Long, consumedSeconds: Long) = synchronized:
-    val info = accounts.getOrElse(id, List[Accounting.Hour]())
-    val newAccounting: List[Accounting.Hour] =
+    val info = accounts.getOrElse(id, List[UsageHistory.Hour]())
+    val newAccounting: List[UsageHistory.Hour] =
       info match
         case head :: tail if head.hour == currentHour => head.copy(consumedSeconds = head.consumedSeconds + consumedSeconds) :: tail
-        case _ => Accounting.Hour(currentHour, consumedSeconds) :: info
+        case _ => UsageHistory.Hour(currentHour, consumedSeconds) :: info
 
     accounts =
-      Accounting.clean(
+      UsageHistory.clean(
         accounts.updated(id, newAccounting),
         currentHour - expireAfterHour
       )

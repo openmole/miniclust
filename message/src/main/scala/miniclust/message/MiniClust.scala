@@ -17,6 +17,7 @@ package miniclust.message
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import com.github.f4b6a3.ulid.Ulid
 import io.circe.*
 import io.circe.syntax.*
 
@@ -30,7 +31,7 @@ object MiniClust:
     def jobDirectory = "job"
     def workerDirectory = "worker"
     def workerActivity = s"$workerDirectory/activity"
-
+    def accountingDirectory = s"$workerDirectory/accounting"
     def activityFile(id: String) = s"$workerActivity/${id}"
 
   object User:
@@ -65,7 +66,7 @@ object MiniClust:
 
   object WorkerActivity:
     given derivation.Configuration = Tool.jsonConfiguration
-    given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived[WorkerActivity]
+    given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived
 
     def apply(cores: Int, key: String) =
       new WorkerActivity(cores, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString, key)
@@ -75,3 +76,16 @@ object MiniClust:
       Minio.upload(minio, coordinationBucket, content, Coordination.activityFile(activity.identifier))
 
   case class WorkerActivity(cores: Int, ip: String, identifier: String, key: String)
+
+  object JobResourceUsage:
+    given derivation.Configuration = Tool.jsonConfiguration
+    given Codec[JobResourceUsage] = derivation.ConfiguredCodec.derived
+
+    def publish(minio: Minio, coordinationBucket: Minio.Bucket, usage: JobResourceUsage) =
+      import com.github.f4b6a3.ulid.*
+      val content = usage.asJson.noSpaces
+      val ulid = UlidCreator.getUlid
+      val path = s"${Coordination.accountingDirectory}/${usage.bucket}/${ulid.toLowerCase}"
+      Minio.upload(minio, coordinationBucket, content, path)
+
+  case class JobResourceUsage(bucket: String, identifier: String, key: String, second: Long, resource: Seq[Message.Resource], finalState: Message)

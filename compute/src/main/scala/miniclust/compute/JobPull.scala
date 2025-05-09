@@ -1,6 +1,6 @@
 package miniclust.compute
 
-import miniclust.message.Minio.{Bucket, jsonContentType, listObjects}
+import miniclust.message.Minio.{Bucket, content, jsonContentType, listObjects}
 import miniclust.message.*
 
 import java.io.FileNotFoundException
@@ -90,7 +90,7 @@ object JobPull:
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
       RunningJob.parse(i.name.drop(prefix.size), i.lastModified.get)
 
-  def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: Accounting)(using config: JobPullConfig): SelectedJob | NotSelected =
+  def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory)(using config: JobPullConfig): SelectedJob | NotSelected =
 //    val runningJob = runningJobs(coordinationBucket)
 //    val runningByBucket = runningJob.groupBy(r => r.bucketName).view.mapValues(_.size).toMap
 
@@ -182,7 +182,7 @@ object JobPull:
 
 
 
-  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: Accounting)(using config: JobPullConfig): SubmittedJob =
+  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory)(using config: JobPullConfig): SubmittedJob =
     val job = selectJob(minio, coordinationBucket, pool, accounting)
 
     job match
@@ -223,7 +223,7 @@ object JobPull:
         pull(minio, coordinationBucket, pool, accounting)
 
 
-  def pullJob(minio: Minio, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: Accounting)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
+  def pullJob(minio: Minio, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: UsageHistory, nodeId: String)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
     val job = JobPull.pull(minio, coordinationBucket, pool, accounting)
     val heartBeat = JobPull.startHeartBeat(minio, coordinationBucket, job)
     Background.run:
@@ -236,8 +236,12 @@ object JobPull:
         Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
         if msg.canceled then JobPull.clearCancel(minio, job.bucket, job.id)
+
+        Background.run:
+          val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)
+          MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
       finally
         ComputingResource.dispose(job.allocated)
-        accounting.updateAccount(job.bucket.name, Accounting.currentHour, Accounting.elapsedSeconds(start) * job.allocated.core)
+        accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
         heartBeat.stop()
         JobPull.checkOut(minio, coordinationBucket, job)

@@ -21,9 +21,12 @@ import miniclust.compute.Cron.StopTask
 import miniclust.message.*
 import miniclust.message.MiniClust.WorkerActivity
 
+import java.util.logging.Logger
 import scala.util.Random
 
 object Service:
+
+  val logger = Logger.getLogger(getClass.getName)
 
   def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, random: Random) =
     val old = 7 * 60 * 60 * 24
@@ -48,6 +51,7 @@ object Service:
     def tooOld(d: Long) = (date - d) > old
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
+      logger.info(s"Removing old data of bucket ${b}")
       def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
       def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
       def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))

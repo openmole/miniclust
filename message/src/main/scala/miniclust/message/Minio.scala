@@ -127,7 +127,6 @@ object Minio:
           else None
       .toSeq
 
-
   def delete(minio: Minio, bucket: Bucket, path: String*): Unit =
     withClient(minio): c =>
       val delete = Delete.builder().objects(path.map(p => ObjectIdentifier.builder().key(p).build()).asJava).build()
@@ -211,14 +210,21 @@ object Minio:
 
   case class MinioObject(name: String, dir: Boolean, lastModified: Option[Long])
 
-  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false) =
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true) =
     withClient(minio): c =>
       val listRequest =
+        val p =
+          if addSlash && !prefix.endsWith("/")
+          then s"$prefix/"
+          else prefix
+
         val r = ListObjectsV2Request.builder()
           .bucket(bucket.name)
-          .prefix(prefix)
+          .prefix(p)
 
-        if recursive then r.delimiter("/") else r
+        if !recursive
+        then r.delimiter("/")
+        else r
 
       var token: String = null
       var more = true
@@ -227,9 +233,10 @@ object Minio:
       while more
       do
         val listedObjects = c.listObjectsV2(listRequest.continuationToken(token).build())
-
         token = listedObjects.nextContinuationToken()
-        if !listedObjects.isTruncated then more = false
+
+        if !listedObjects.isTruncated
+        then more = false
 
         response.addAll:
           listedObjects.contents().asScala.map: c =>

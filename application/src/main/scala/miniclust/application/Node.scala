@@ -31,6 +31,39 @@ import scala.util.hashing.MurmurHash3
 object Node:
   val logger = Logger.getLogger(getClass.getName)
 
+def loadConfiguration(configurationFile: File) =
+  val configuration = Configuration.read(configurationFile)
+
+  val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
+  val activity = MiniClust.WorkerActivity(cores, configuration.minio.key)
+
+  val baseDirectory = File(configuration.compute.workDirectory)
+  baseDirectory.createDirectories()
+
+  val fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
+
+  val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
+
+  val minio = Minio(server)
+  val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
+  val seed = UUID.randomUUID().hashCode()
+
+  val random = util.Random(seed)
+
+  (
+    configuration = configuration,
+    cores = cores,
+    activity = activity,
+    baseDirectory = baseDirectory,
+    fileCache = fileCache,
+    server = server,
+    minio = minio,
+    coordinationBucket = coordinationBucket,
+    random = random,
+    seed = seed
+  )
+
+
 @main def run(args: String*) =
   case class Args(
     configurationFile: Option[File] = None)
@@ -48,49 +81,34 @@ object Node:
 
   OParser.parse(parser1, args, Args()) match
     case Some(config) =>
-      val configuration = Configuration.read(config.configurationFile.get)
+      val c = loadConfiguration(config.configurationFile.get)
+      given FileCache = c.fileCache
 
-      val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
-      val activity = MiniClust.WorkerActivity(cores, configuration.minio.key)
+      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
+      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, c.random)
 
-      val baseDirectory = File(configuration.compute.workDirectory)
-      baseDirectory.createDirectories()
-
-      given fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
-
-      val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
-
-      val minio = Minio(server)
-      val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
-      val seed = UUID.randomUUID().hashCode()
-
-      val random = util.Random(seed)
-
-      JobPull.removeAbandonedJobs(minio, coordinationBucket)
-      val services = Service.startBackgroud(minio, coordinationBucket, fileCache, activity, random)
-
-      val pool = ComputingResource(cores)
+      val pool = ComputingResource(c.cores)
       val accounting = UsageHistory(48)
 
       (0 until 10).map: i =>
         given Compute.ComputeConfig =
           Compute.ComputeConfig(
-            baseDirectory = File(configuration.compute.workDirectory) / i.toString,
-            cache = configuration.compute.cache,
-            sudo = configuration.compute.user orElse configuration.compute.sudo
+            baseDirectory = File(c.configuration.compute.workDirectory) / i.toString,
+            cache = c.configuration.compute.cache,
+            sudo = c.configuration.compute.user orElse c.configuration.compute.sudo
           )
 
-        given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(seed + i + 1))
+        given JobPull.JobPullConfig = JobPull.JobPullConfig(util.Random(c.seed + i + 1))
 
         Background.run:
           while true
           do
-            try JobPull.pullJob(minio, coordinationBucket, pool, accounting, activity.identifier)
+            try JobPull.pullJob(c.minio, c.coordinationBucket, pool, accounting, c.activity.identifier)
             catch
               case e: Exception =>
                 Compute.logger.log(Level.SEVERE, "Error in run loop", e)
 
-      Node.logger.info(s"Worker is running, pulling jobs, resources: ${cores} cores")
+      Node.logger.info(s"Worker is running, pulling jobs, resources: ${c.cores} cores")
 
       val finished = Semaphore(0)
       scala.sys.addShutdownHook:
@@ -98,7 +116,7 @@ object Node:
       finished.acquire()
 
       services.stop()
-      minio.close()
+      c.minio.close()
 
     case _ =>
 

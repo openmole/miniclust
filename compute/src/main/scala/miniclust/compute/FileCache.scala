@@ -22,7 +22,7 @@ import better.files.*
 import com.github.benmanes.caffeine.cache.*
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.{ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 
 
 object FileCache:
@@ -121,11 +121,17 @@ object FileCache:
       if !fileCache.usageTracker.isInUse(name)
     do
       def deleteFunction(k: String, v: File): Null =
-        v.delete(true)
+        file.delete(true)
         removal.delete(true)
         null
 
       fileCache.cache.asMap().compute(name, deleteFunction)
+
+//  private def lock[T](readWriteLock: ReadWriteLock, write: Boolean = false)(f: => T): T =
+//    val lock = if !write then readWriteLock.readLock() else readWriteLock.writeLock()
+//    lock.lock()
+//    try f
+//    finally lock.unlock()
 
 case class FileCache(
   cache: Cache[String, File],

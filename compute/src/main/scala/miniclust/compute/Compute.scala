@@ -166,15 +166,20 @@ object Compute:
 
         testCanceled()
 
+        val output = job.submitted.stdOut.map(p => p -> jobDirectory(job.id) / "__output__")
+        val error = job.submitted.stdErr.map(p => p -> jobDirectory(job.id) / "__error__")
+
+        def uploadOutputError() =
+          Async.blocking:
+            uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
+
         val usedCache =
           try prepare(minio, job.bucket, job.submitted, job.id)
           catch
              case e: Exception =>
                logger.info(s"${job.id}: error preparing files $e")
+               uploadOutputError()
                boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
-
-        val output = job.submitted.stdOut.map(p => p -> jobDirectory(job.id) / "__output__")
-        val error = job.submitted.stdErr.map(p => p -> jobDirectory(job.id) / "__error__")
 
         try
           testCanceled()
@@ -187,7 +192,10 @@ object Compute:
             do
               if Instant.now().getEpochSecond > job.allocated.deadLine
               then
-                boundary.break(Message.Failed(job.id, "Max time requested for the job has been exhausted", Message.Failed.Reason.TimeExhausted))
+                def message = s"Max requested time for the job has been exhausted"
+                logger.info(s"${job.id}: $message")
+                uploadOutputError()
+                boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 
               if JobPull.canceled(minio, job.bucket, job.id)
               then
@@ -205,21 +213,22 @@ object Compute:
 
           if exit != 0
           then
-            Async.blocking:
-              uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
-
-            boundary.break(Message.Failed(job.id, s"Return exit code of execution was not 0 but ${exit}", Message.Failed.Reason.ExecutionFailed))
+            def message = s"Return exit code of execution was not 0 but ${exit}"
+            logger.info(s"${job.id}: $message")
+            uploadOutputError()
+            boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.ExecutionFailed))
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
           Async.blocking:
-            uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
             uploadOutputFiles(minio, job.bucket, job.submitted, job.id).awaitAll
         catch
           case e: Exception =>
             logger.info(s"${job.id}: error completing the job $e")
+            uploadOutputError()
             boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.CompletionFailed))
 
+        uploadOutputError()
         Message.Completed(job.id)
       catch
         case e: Exception => Message.Failed(job.id, e.getMessage, Message.Failed.Reason.UnexpectedError)

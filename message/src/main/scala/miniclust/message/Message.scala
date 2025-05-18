@@ -77,7 +77,10 @@ object Message:
     object Cache:
       given Conversion[String, Cache] = s => Cache(s)
 
-    case class Cache(hash: String, extract: Boolean = false) derives derivation.ConfiguredCodec
+    enum Extraction derives derivation.ConfiguredCodec:
+      case TarGZ
+
+    case class Cache(hash: String, extraction: Option[Extraction] = None) derives derivation.ConfiguredCodec
 
   case class InputFile(remote: String, local: String, cacheKey: Option[InputFile.Cache] = None) derives derivation.ConfiguredCodec
 

@@ -111,28 +111,23 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Universal / javaOptions ++= Seq("-J-Xmx400m")
 )
 
-
 ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))
 ThisBuild / homepage := Some(url("https://github.com/openmole/miniclust"))
 
-ThisBuild / publishTo := sonatypePublishToBundle.value
-
+ThisBuild / publishTo := localStaging.value
 ThisBuild / pomIncludeRepository := { _ => false}
 ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/openmole/miniclust.git"), "scm:git:git@github.com:openmole/miniclust.git"))
 
-ThisBuild / pomExtra := {
-  <!-- Developer contact information -->
-    <developers>
-      <developer>
-        <id>romainreuillon</id>
-        <name>Romain Reuillon</name>
-        <url>https://github.com/romainreuillon/</url>
-      </developer>
-    </developers>
-}
+ThisBuild / developers := List(
+  Developer(
+    id    = "romainreuillon",
+    name  = "Romain Reuillon",
+    email = "",
+    url   = url("https://github.com/romainreuillon/")
+  )
+)
 
-ThisBuild / sonatypeProfileName := "org.openmole"
-
+//ThisBuild / sonatypeProfileName := "org.openmole"
 import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations.*
 
 releaseVersionBump := sbtrelease.Version.Bump.Minor
@@ -147,7 +142,7 @@ releaseProcess := Seq[ReleaseStep](
   setReleaseVersion,
   tagRelease,
   releaseStepCommandAndRemaining("+publishSigned"),
-  releaseStepCommand("sonatypeBundleRelease"),
+  releaseStepCommand("sonaRelease"),
   setNextVersion,
   commitNextVersion,
   //releaseStepCommand("sonatypeReleaseAll"),

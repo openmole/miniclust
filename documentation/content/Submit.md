@@ -3,8 +3,8 @@
 ## Using the Scala client
 
 ```scala
-//> using scala "3.3.5"
-//> using dep "org.openmole.miniclust::submit:1.0-SNAPSHOT" 
+//> using scala "3.7.0"
+//> using dep "org.openmole.miniclust::submit:1.0" 
 //> using repository "https://oss.sonatype.org/content/repositories/snapshots/"
 
 import miniclust.submit.*
@@ -203,8 +203,7 @@ If you which to generate a client in another language here is the JSON schema of
       "type" : "object",
       "required" : [
         "account",
-        "command",
-        "noise"
+        "command"
       ],
       "properties" : {
         "account" : {
@@ -244,7 +243,10 @@ If you which to generate a client in another language here is the JSON schema of
           }
         },
         "noise" : {
-          "type" : "string"
+          "type" : [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -290,17 +292,35 @@ If you which to generate a client in another language here is the JSON schema of
       "title" : "Cache",
       "type" : "object",
       "required" : [
-        "hash",
-        "extract"
+        "hash"
       ],
       "properties" : {
         "hash" : {
           "type" : "string"
         },
-        "extract" : {
-          "type" : "boolean"
+        "extraction" : {
+          "anyOf" : [
+            {
+              "$ref" : "#/$defs/Extraction"
+            },
+            {
+              "type" : "null"
+            }
+          ]
         }
       }
+    },
+    "Extraction" : {
+      "title" : "Extraction",
+      "oneOf" : [
+        {
+          "$ref" : "#/$defs/TarGZ"
+        }
+      ]
+    },
+    "TarGZ" : {
+      "title" : "TarGZ",
+      "type" : "object"
     },
     "OutputFile" : {
       "title" : "OutputFile",

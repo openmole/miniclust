@@ -20,6 +20,7 @@ package miniclust.compute
 import miniclust.message.{Account, Tool}
 import better.files.*
 import com.github.benmanes.caffeine.cache.*
+import miniclust.message.Message.InputFile.Extraction
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.locks.{ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
@@ -86,12 +87,12 @@ object FileCache:
 
     new FileCache(cache, fileFolder, UsageTracker())
 
-  def use(fileCache: FileCache, hash: String, extract: Boolean = false)(create: File => Unit): (File, UsedKey) =
+  def use(fileCache: FileCache, hash: String, extract: Option[Extraction] = None)(create: File => Unit): (File, UsedKey) =
     val name =
       val (_, hashValue) = Tool.splitHash(hash)
-      if !extract
-      then s"file-$hashValue"
-      else s"tgz-$hashValue"
+      extract match
+        case None => s"file-$hashValue"
+        case Some(Extraction.TarGZ) => s"tgz-$hashValue"
 
     fileCache.usageTracker.acquire(name)
     def createFunction(name: String): File =

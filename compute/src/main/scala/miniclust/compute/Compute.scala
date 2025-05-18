@@ -24,6 +24,7 @@ import better.files.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
+import miniclust.message.Message.InputFile.Extraction
 
 import java.io.PrintStream
 import java.security.InvalidParameterException
@@ -49,7 +50,7 @@ object Compute:
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
   def prepare(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
-    def createCache(file: File, remote: String, providedHash: String, extract: Boolean = false) =
+    def createCache(file: File, remote: String, providedHash: String, extraction: Option[Extraction] = None) =
       val tmp = File.newTemporaryFile()
       try
         Minio.download(minio, bucket, remote, tmp.toJava)
@@ -60,20 +61,20 @@ object Compute:
           tmp.delete(true)
           throw new InvalidParameterException(s"Cache key for file ${remote} is not the hash of the file, should be equal to $hash")
 
-        if !extract
-        then
-          tmp.moveTo(file)
-          FileCache.setPermissions(file)
-        else
-          val tmpDirectory = File.newTemporaryDirectory()
-          if scala.sys.process.Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
-          then
-            tmpDirectory.delete(true)
-            throw new InvalidParameterException(s"Error extracting the archive ${remote}, should be a tgz archive")
+        extraction match
+          case None =>
+            tmp.moveTo(file)
+            FileCache.setPermissions(file)
+          case Some(Extraction.TarGZ) =>
+            val tmpDirectory = File.newTemporaryDirectory()
+            if scala.sys.process.Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
+            then
+              tmpDirectory.delete(true)
+              throw new InvalidParameterException(s"Error extracting the archive ${remote}, should be a tgz archive")
 
-          tmpDirectory.listRecursively.foreach(FileCache.setPermissions)
-          tmpDirectory.moveTo(file)
-          FileCache.setPermissions(file)
+            tmpDirectory.listRecursively.foreach(FileCache.setPermissions)
+            tmpDirectory.moveTo(file)
+            FileCache.setPermissions(file)
 
       finally tmp.delete(true)
 
@@ -90,8 +91,8 @@ object Compute:
                 case Some(cache) =>
                   Some:
                     val (file, key) =
-                      FileCache.use(fileCache, cache.hash, cache.extract): file =>
-                        createCache(file, input.remote, cache.hash, cache.extract)
+                      FileCache.use(fileCache, cache.hash, cache.extraction): file =>
+                        createCache(file, input.remote, cache.hash, cache.extraction)
                     Files.createSymbolicLink(local.toJava.toPath, file.toJava.getAbsoluteFile.toPath)
                     key
         .awaitAll

@@ -44,7 +44,7 @@ import scala.concurrent.duration.*
         "ls",
         inputFile = Seq(InputFile("test.txt", "test.txt", Some(Tool.hashFile(testFile)))),
         stdOut = Some("output.txt"),
-        noise = "ea"
+        noise = Some("ea")
       )
 
     val id = submit(minio, bucket, run)

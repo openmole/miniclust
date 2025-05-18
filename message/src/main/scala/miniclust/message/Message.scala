@@ -59,7 +59,7 @@ object Message:
     stdOut: Option[String] = None,
     stdErr: Option[String] = None,
     resource: Seq[Resource] = Seq(),
-    noise: String = "") extends Message
+    noise: Option[String] = None) extends Message
 
   case class Failed(id: String, message: String, reason: Failed.Reason) extends Message
   case class Completed(id: String) extends Message

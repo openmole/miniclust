@@ -46,7 +46,6 @@ object Compute:
 
   case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
 
-
   def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
 
   def prepare(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
@@ -156,8 +155,6 @@ object Compute:
     createJobDirectory(job.id)
 
     try
-      import scala.sys.process.*
-
       boundary[Message.FinalState]:
         logger.info(s"${job.id}: preparing files")
 
@@ -167,19 +164,22 @@ object Compute:
 
         testCanceled()
 
-        val output = job.submitted.stdOut.map(p => p -> jobDirectory(job.id) / "__output__")
-        val error = job.submitted.stdErr.map(p => p -> jobDirectory(job.id) / "__error__")
+        val output = job.submitted.stdOut.map(p => (path = p, file = jobDirectory(job.id) / "__output__"))
+        val error = job.submitted.stdErr.map(p => (path = p, file = jobDirectory(job.id) / "__error__"))
 
-        def uploadOutputError() =
+        output.foreach(_.file.createFile())
+        error.foreach(_.file.createFile())
+
+        def uploadOutputError(errorMessage: Option[String]) =
           Async.blocking:
-            uploadOutput(minio, job.bucket, job.id, output, error).awaitAll
+            (error zip errorMessage).foreach((s, m) => s.file.appendLine(s"[Error] $m"))
+            uploadOutput(minio, job.bucket, job.id, output.map(_.toTuple), error.map(_.toTuple)).awaitAll
 
         val usedCache =
           try prepare(minio, job.bucket, job.submitted, job.id)
           catch
              case e: Exception =>
-               logger.info(s"${job.id}: error preparing files $e")
-               uploadOutputError()
+               uploadOutputError(Some(s"${job.id}: error preparing files $e"))
                boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
 
         try
@@ -187,15 +187,14 @@ object Compute:
 
           val exit =
             logger.info(s"${job.id}: run ${job.submitted.command}")
-            val process = createProcess(job.id, job.submitted.command, output.map(_._2), error.map(_._2))
+            val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
             while process.isAlive
             do
               if Instant.now().getEpochSecond > job.allocated.deadLine
               then
                 def message = s"Max requested time for the job has been exhausted"
-                logger.info(s"${job.id}: $message")
-                uploadOutputError()
+                uploadOutputError(Some(s"${job.id}: $message"))
                 boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 
               if JobPull.canceled(minio, job.bucket, job.id)
@@ -215,8 +214,7 @@ object Compute:
           if exit != 0
           then
             def message = s"Return exit code of execution was not 0 but ${exit}"
-            logger.info(s"${job.id}: $message")
-            uploadOutputError()
+            uploadOutputError(Some(s"${job.id}: $message"))
             boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.ExecutionFailed))
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
@@ -225,11 +223,10 @@ object Compute:
             uploadOutputFiles(minio, job.bucket, job.submitted, job.id).awaitAll
         catch
           case e: Exception =>
-            logger.info(s"${job.id}: error completing the job $e")
-            uploadOutputError()
+            uploadOutputError(Some(s"${job.id}: error completing the job $e"))
             boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.CompletionFailed))
 
-        uploadOutputError()
+        uploadOutputError(None)
         Message.Completed(job.id)
       catch
         case e: Exception => Message.Failed(job.id, e.getMessage, Message.Failed.Reason.UnexpectedError)

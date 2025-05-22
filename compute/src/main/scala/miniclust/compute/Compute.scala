@@ -46,7 +46,8 @@ object Compute:
 
   case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
 
-  def jobDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
+  def baseDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
+  def jobDirectory(id: String)(using config: ComputeConfig) = baseDirectory(id) / "job"
 
   def prepare(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
     def createCache(file: File, remote: String, providedHash: String, extraction: Option[Extraction] = None) =
@@ -123,11 +124,12 @@ object Compute:
         logger.info(s"${id}: upload file ${local} to ${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
         Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
 
-  def createJobDirectory(id: String)(using config: ComputeConfig) =
-    jobDirectory(id).delete(true)
+  def createDirectories(id: String)(using config: ComputeConfig) =
+    baseDirectory(id).delete(true)
+    baseDirectory(id).createDirectories()
     jobDirectory(id).createDirectories()
 
-  def cleanJobDirectory(id: String)(using config: ComputeConfig) = jobDirectory(id).delete(true)
+  def cleanBaseDirectory(id: String)(using config: ComputeConfig) = baseDirectory(id).delete(true)
 
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
     try
@@ -138,21 +140,21 @@ object Compute:
           val fullCommand =
             Seq(
               s"sudo chown -R $sudo ${jobDirectory(id)}",
-              s"sudo -u $sudo -- $command",
-              s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(id)}'").mkString(" && ")
+              s"sudo -u $sudo -- $command").mkString(" && ")
 
           ProcessUtil.createProcess(Seq("bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
+
     catch
       case e: Exception =>
         logger.info(s"${id}: error launching job execution $e")
-        boundary.break(Message.Failed(id, e.getMessage, Message.Failed.Reason.ExecutionFailed))
+        boundary.break(Message.Failed(id, Tool.exceptionToString(e), Message.Failed.Reason.ExecutionFailed))
 
 
   def run(
     minio: Minio,
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache) =
-    createJobDirectory(job.id)
+    createDirectories(job.id)
 
     try
       boundary[Message.FinalState]:
@@ -167,8 +169,12 @@ object Compute:
         val output = job.submitted.stdOut.map(p => (path = p, file = jobDirectory(job.id) / "__output__"))
         val error = job.submitted.stdErr.map(p => (path = p, file = jobDirectory(job.id) / "__error__"))
 
-        output.foreach(_.file.createFile())
-        error.foreach(_.file.createFile())
+        def create(f: File) =
+          f.parent.createDirectories()
+          f.write("")
+
+        output.foreach(o => create(o.file))
+        error.foreach(o => create(o.file))
 
         def uploadOutputError(errorMessage: Option[String]) =
           Async.blocking:
@@ -180,7 +186,7 @@ object Compute:
           catch
              case e: Exception =>
                uploadOutputError(Some(s"${job.id}: error preparing files $e"))
-               boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.PreparationFailed))
+               boundary.break(Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.PreparationFailed))
 
         try
           testCanceled()
@@ -189,25 +195,31 @@ object Compute:
             logger.info(s"${job.id}: run ${job.submitted.command}")
             val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
-            while process.isAlive
-            do
-              if Instant.now().getEpochSecond > job.allocated.deadLine
-              then
-                def message = s"Max requested time for the job has been exhausted"
-                uploadOutputError(Some(s"${job.id}: $message"))
-                boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
+            try
+              while process.isAlive
+              do
+                if Instant.now().getEpochSecond > job.allocated.deadLine
+                then
+                  def message = s"Max requested time for the job has been exhausted"
+                  uploadOutputError(Some(s"${job.id}: $message"))
+                  boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 
-              if JobPull.canceled(minio, job.bucket, job.id)
-              then
-                process.dispose()
-                boundary.break(Message.Canceled(job.id, true))
+                if JobPull.canceled(minio, job.bucket, job.id)
+                then
+                  process.dispose()
+                  boundary.break(Message.Canceled(job.id, true))
 
-              Thread.sleep(10000)
+                Thread.sleep(10000)
+              end while
 
-            process.dispose()
+              process.dispose()
+            finally
+              import scala.sys.process.*
+              s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(job.id)}'".run()
+
             process.exitValue
 
-          logger.info(s"${job.id}: complete job")
+          logger.info(s"${job.id}: process ended")
 
           testCanceled()
 
@@ -224,13 +236,13 @@ object Compute:
         catch
           case e: Exception =>
             uploadOutputError(Some(s"${job.id}: error completing the job $e"))
-            boundary.break(Message.Failed(job.id, e.getMessage, Message.Failed.Reason.CompletionFailed))
+            boundary.break(Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.CompletionFailed))
 
         uploadOutputError(None)
         Message.Completed(job.id)
       catch
-        case e: Exception => Message.Failed(job.id, e.getMessage, Message.Failed.Reason.UnexpectedError)
-      finally cleanJobDirectory(job.id)
+        case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
+      finally cleanBaseDirectory(job.id)
 
 
 

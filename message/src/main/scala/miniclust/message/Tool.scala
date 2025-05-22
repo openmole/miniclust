@@ -79,3 +79,9 @@ object Tool:
       .toOption
     finally
       client.close()
+
+  def exceptionToString(e: Throwable): String =
+    import java.io.{PrintWriter, StringWriter}
+    val sw = StringWriter()
+    e.printStackTrace(PrintWriter(sw))
+    sw.toString

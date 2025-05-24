@@ -22,6 +22,7 @@ import better.files.*
 import com.github.benmanes.caffeine.cache.*
 import miniclust.message.Message.InputFile.Extraction
 
+import java.util.UUID
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.locks.{ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 
@@ -97,9 +98,15 @@ object FileCache:
     fileCache.usageTracker.acquire(name)
     def createFunction(name: String): File =
       val cacheFile = fileCache.fileFolder / name
-      (fileCache.fileFolder / removalFile(name)).delete(true)
-      create(cacheFile)
-      cacheFile
+      try
+        cacheFile.delete(true)
+        (fileCache.fileFolder / removalFile(name)).delete(true)
+        create(cacheFile)
+        cacheFile
+      catch
+        case e: Exception =>
+          cacheFile.delete(true)
+          throw e
 
     try
       val f = fileCache.cache.get(name, createFunction)

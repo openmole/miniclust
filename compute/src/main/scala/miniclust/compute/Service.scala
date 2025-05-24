@@ -28,7 +28,7 @@ object Service:
 
   val logger = Logger.getLogger(getClass.getName)
 
-  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, random: Random) =
+  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, resource: ComputingResource, random: Random) =
     val old = 7 * 60 * 60 * 24
     val removeRandom = Random(random.nextLong)
     val s1 =
@@ -42,7 +42,8 @@ object Service:
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>
-        MiniClust.WorkerActivity.publish(minio, coordinationBucket, activity)
+        val currentActivity = activity.copy(used = activity.cores - ComputingResource.freeCore(resource))
+        MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
 
     StopTask.combine(s1, s2, s3, s4)
 

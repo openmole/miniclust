@@ -24,6 +24,7 @@ object ComputingResource:
   def apply(core: Int) = new ComputingResource(core)
 
   case class Allocated(pool: ComputingResource, core: Int, deadLine: Long)
+
   def dispose(a: Allocated): Unit =
     a.pool.synchronized:
       a.pool.core += a.core
@@ -36,6 +37,9 @@ object ComputingResource:
         Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime)))
       else None
 
+  def freeCore(pool: ComputingResource) =
+    pool.synchronized:
+      pool.core
 
 case class ComputingResource(private var core: Int, defaultTime: Int = 3600)
 

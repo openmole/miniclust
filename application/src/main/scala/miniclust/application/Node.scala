@@ -85,11 +85,12 @@ def loadConfiguration(configurationFile: File) =
       given FileCache = c.fileCache
 
       JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
-      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, c.random)
 
       val pool = ComputingResource(c.cores)
       val accounting = UsageHistory(48)
-
+      
+      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pool, c.random)
+      
       (0 until 10).map: i =>
         given Compute.ComputeConfig =
           Compute.ComputeConfig(

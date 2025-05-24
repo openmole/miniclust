@@ -147,12 +147,11 @@ object JobPull:
   def removeAbandonedJobs(minio: Minio, coordinationBucket: Bucket) =
     val date = Minio.date(minio)
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
-    val objects = Minio.listObjects(minio, coordinationBucket, prefix = prefix)
 
     case class Directory(path: String)
 
     val oldJobs =
-      Minio.listObjects(minio, coordinationBucket, prefix = prefix).view.flatMap: i =>
+      Minio.listObjects(minio, coordinationBucket, prefix = prefix, recursive = true).view.flatMap: i =>
         if i.dir
         then None //Some(Directory(o.objectName()))
         else

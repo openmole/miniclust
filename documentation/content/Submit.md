@@ -106,11 +106,15 @@ For instance you can describe a simple job:
 }
 ```
 
-Get the hash of the job:
+Get the blake3 hash of the job:
 ```bash
-blak3
+b3sum test.json
 ```
 
+Then copy the file in the submit directory and name it using the blake3 hash:
+```bash
+mc cp test.json minic/login/job/submit/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76
+```
 TODO: document the protocol.
 
 ## The messages JSON schema

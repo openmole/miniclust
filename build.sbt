@@ -114,8 +114,13 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
 ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))
 ThisBuild / homepage := Some(url("https://github.com/openmole/miniclust"))
 
-ThisBuild / publishTo := localStaging.value
-ThisBuild / pomIncludeRepository := { _ => false}
+ThisBuild / publishTo := {
+  val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
+  if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
+  else localStaging.value
+}
+
+//ThisBuild / pomIncludeRepository := { _ => false}
 ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/openmole/miniclust.git"), "scm:git:git@github.com:openmole/miniclust.git"))
 
 ThisBuild / developers := List(

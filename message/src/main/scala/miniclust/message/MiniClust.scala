@@ -55,12 +55,13 @@ object MiniClust:
     val json = parser.parse(s).toTry.get.asObject.map(_.remove("version")).asJson
     json.as[Message].toTry.get
 
-  def generateMessage(message: Message)(using version: Message.Version): String =
+  def generateMessage(message: Message, pretty: Boolean = false)(using version: Message.Version): String =
     val json = message.asJson
     val versionJson =
       Json.obj:
         "version" -> Json.fromString(version.asString)
-    json.deepMerge(versionJson).noSpaces
+    val merged = json.deepMerge(versionJson)
+    if !pretty then merged.noSpaces else merged.spaces2
 
   def jobId(run: Message.Submitted) = Tool.hashString(generateMessage(run))
 

@@ -4,7 +4,7 @@
 
 ```scala
 //> using scala "3.7.0"
-//> using dep "org.openmole.miniclust::submit:1.0" 
+//> using dep "org.openmole.miniclust::submit:1.1-SNAPSHOT" 
 //> using repository "https://oss.sonatype.org/content/repositories/snapshots/"
 
 import miniclust.submit.*
@@ -73,7 +73,43 @@ The file will be put in the cache of the worker a reused for subsequent executio
 
 MiniClust works by exchanging json files through the central minio server.
 
-To submit a job you should upload a submit message to a bucket matching tagged with the tag `miniclust:submit` in the directory `/job/submit`. The name of the file should be hashed using blake3 and be named `blake3:hashvalue`.
+To interact with MiniClust, you use a bucket tagged with the tag `miniclust:submit`
+
+Directories used in the user bucket:
+- `/job/submit`: directory to submit a job, accept Submitted messages,
+- `/job/cancel`: directory to cancel a job, accept Canceled messages,
+- `/job/status`: directory to read the status of a job, exposes, Running, Failed, Completed and Canceled messages.
+- `/job/output`: directory containing the output files, produced by a job.
+
+### Submit a job
+
+To submit a job, upload a valid Submitted json file in fn the directory `/job/submit`. The name of the file should be hashed using blake3 and be named `blake3:hashvalue`.
+
+For instance you can describe a simple job:
+```json
+{
+  "version" : "1",
+  "account" : {
+    "bucket" : "login"
+  },
+  "command" : "echo Hello MiniClust",
+  "input-file" : [
+  ],
+  "output-file" : [
+  ],
+  "std-out" : "output.txt",
+  "std-err" : null,
+  "resource" : [
+  ],
+  "noise" : null,
+  "type" : "submitted"
+}
+```
+
+Get the hash of the job:
+```bash
+blak3
+```
 
 TODO: document the protocol.
 

@@ -166,8 +166,8 @@ object Compute:
 
         testCanceled()
 
-        val output = job.submitted.stdOut.map(p => (path = p, file = jobDirectory(job.id) / "__output__"))
-        val error = job.submitted.stdErr.map(p => (path = p, file = jobDirectory(job.id) / "__error__"))
+        val output = job.submitted.stdOut.map(p => (path = p, file = baseDirectory(job.id) / "__output__"))
+        val error = job.submitted.stdErr.map(p => (path = p, file = baseDirectory(job.id) / "__error__"))
 
         def create(f: File) =
           f.parent.createDirectories()

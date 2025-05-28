@@ -146,7 +146,7 @@ Once the job is completed, the status looks like:
 
 You can download the output of your job from the `/job/output` directory:
 ```bash
-mc cat babar-user/reuillon/job/output/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76/output.txt
+mc cat minio/login/job/output/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76/output.txt
 ```
 
 Displays:

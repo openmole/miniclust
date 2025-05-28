@@ -69,7 +69,7 @@ To cache a file on the execution nodes you can define you can specify it in the 
 
 The file will be put in the cache of the worker a reused for subsequent execution. The cache key must be the blake3 hash of the file (`blake3:hashvalue`).
 
-## Using another language
+## Using bash (or any other language)
 
 MiniClust works by exchanging json files through the central minio server.
 
@@ -157,4 +157,4 @@ Hello MiniClust
 
 ## JSON Schema
 
-You can get the complete JSON Schema of messages you can exchange with MiniClust [here](Schema.md).
+To implement a client for your language of choice, you can get the complete [JSON Schema of the MiniClust messages](Schema.md).

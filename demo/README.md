@@ -1,7 +1,7 @@
 
 # MiniClust Demon
 
-This projet demonstrate a miniclust service with a single worker node using docker compose.
+This project demonstrate a MiniClust service with a single worker, using docker compose.
 
 ## Clone the repo
 
@@ -27,7 +27,7 @@ Run:
 # Get the status of the job
 ./status.sh
 
-# Get the result of job
+# Get the result of the job
 ./result.sh
 ```
 

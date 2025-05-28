@@ -60,7 +60,7 @@ object JobPull:
   case class InvalidJob(bucket: Bucket, id: String, exception: Throwable)
 
   enum NotSelected:
-    case NotFound, NotEnoughResource
+    case NotFound, NotEnoughResource, JobRemoved
 
   object RunningJob:
     def path(bucket: String, id: String) =
@@ -119,6 +119,7 @@ object JobPull:
             ComputingResource.request(pool, cores, time) match
               case Some(r) => SubmittedJob(bucket, id, s, r)
               case None => NotSelected.NotEnoughResource
+          case Failure(e: FileNotFoundException) => NotSelected.JobRemoved
           case Failure(e) => InvalidJob(bucket, id, e)
       case None => NotSelected.NotFound
 
@@ -189,7 +190,7 @@ object JobPull:
         if checkIn(minio, coordinationBucket, job)
         then
           logger.info(s"${job.id}: failed to validate, ${job.exception.getMessage}")
-          Minio.upload(minio, job.bucket, MiniClust.generateMessage(Message.Failed(job.id, job.exception.getMessage, Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+          Minio.upload(minio, job.bucket, MiniClust.generateMessage(Message.Failed(job.id, Tool.exceptionToString(job.exception), Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
           Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
           checkOut(minio, coordinationBucket, job)
 
@@ -217,6 +218,7 @@ object JobPull:
             ComputingResource.dispose(job.allocated)
             pull(minio, coordinationBucket, pool, accounting)
 
+      case NotSelected.JobRemoved => pull(minio, coordinationBucket, pool, accounting)
       case NotSelected.NotFound | NotSelected.NotEnoughResource =>
         Thread.sleep(config.random.nextInt(10000))
         pull(minio, coordinationBucket, pool, accounting)

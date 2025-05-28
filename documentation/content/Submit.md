@@ -85,7 +85,7 @@ Directories used in the user bucket:
 
 To submit a job, upload a valid Submitted json file in fn the directory `/job/submit`. The name of the file should be hashed using blake3 and be named `blake3:hashvalue`.
 
-For instance you can describe a simple job:
+For instance, you can describe a simple job:
 ```json
 {
   "version" : "1",
@@ -113,328 +113,48 @@ b3sum test.json
 
 Then copy the file in the submit directory and name it using the blake3 hash:
 ```bash
-mc cp test.json minic/login/job/submit/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76
+mc cp test.json minio/login/job/submit/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76
 ```
-TODO: document the protocol.
 
-## The messages JSON schema
+### Check the status
 
-If you which to generate a client in another language here is the JSON schema of the messages:
+Your job description stays in the submit directory until it is processed by a worker. As soon as it is the case
+you can then check the status of you jobs in the status directory.
+
+```bash
+mc cat minio/login/job/status/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76 | jq
+```
+
+Produces:
 ```json
 {
-  "$schema" : "http://json-schema.org/draft/2020-12/schema#",
-  "$defs" : {
-    "Canceled" : {
-      "title" : "Canceled",
-      "type" : "object",
-      "required" : [
-        "id",
-        "canceled"
-      ],
-      "properties" : {
-        "id" : {
-          "type" : "string"
-        },
-        "canceled" : {
-          "type" : "boolean"
-        }
-      }
-    },
-    "Completed" : {
-      "title" : "Completed",
-      "type" : "object",
-      "required" : [
-        "id"
-      ],
-      "properties" : {
-        "id" : {
-          "type" : "string"
-        }
-      }
-    },
-    "Failed" : {
-      "title" : "Failed",
-      "type" : "object",
-      "required" : [
-        "id",
-        "message",
-        "reason"
-      ],
-      "properties" : {
-        "id" : {
-          "type" : "string"
-        },
-        "message" : {
-          "type" : "string"
-        },
-        "reason" : {
-          "$ref" : "#/$defs/Reason"
-        }
-      }
-    },
-    "Reason" : {
-      "title" : "Reason",
-      "oneOf" : [
-        {
-          "$ref" : "#/$defs/Abandoned"
-        },
-        {
-          "$ref" : "#/$defs/CompletionFailed"
-        },
-        {
-          "$ref" : "#/$defs/ExecutionFailed"
-        },
-        {
-          "$ref" : "#/$defs/Invalid"
-        },
-        {
-          "$ref" : "#/$defs/PreparationFailed"
-        },
-        {
-          "$ref" : "#/$defs/TimeExhausted"
-        },
-        {
-          "$ref" : "#/$defs/UnexpectedError"
-        }
-      ]
-    },
-    "Abandoned" : {
-      "title" : "Abandoned",
-      "type" : "object"
-    },
-    "CompletionFailed" : {
-      "title" : "CompletionFailed",
-      "type" : "object"
-    },
-    "ExecutionFailed" : {
-      "title" : "ExecutionFailed",
-      "type" : "object"
-    },
-    "Invalid" : {
-      "title" : "Invalid",
-      "type" : "object"
-    },
-    "PreparationFailed" : {
-      "title" : "PreparationFailed",
-      "type" : "object"
-    },
-    "TimeExhausted" : {
-      "title" : "TimeExhausted",
-      "type" : "object"
-    },
-    "UnexpectedError" : {
-      "title" : "UnexpectedError",
-      "type" : "object"
-    },
-    "Running" : {
-      "title" : "Running",
-      "type" : "object",
-      "required" : [
-        "id"
-      ],
-      "properties" : {
-        "id" : {
-          "type" : "string"
-        }
-      }
-    },
-    "Submitted" : {
-      "title" : "Submitted",
-      "type" : "object",
-      "required" : [
-        "account",
-        "command"
-      ],
-      "properties" : {
-        "account" : {
-          "$ref" : "#/$defs/Account"
-        },
-        "command" : {
-          "type" : "string"
-        },
-        "inputFile" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/$defs/InputFile"
-          }
-        },
-        "outputFile" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/$defs/OutputFile"
-          }
-        },
-        "stdOut" : {
-          "type" : [
-            "string",
-            "null"
-          ]
-        },
-        "stdErr" : {
-          "type" : [
-            "string",
-            "null"
-          ]
-        },
-        "resource" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/$defs/Resource"
-          }
-        },
-        "noise" : {
-          "type" : [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Account" : {
-      "title" : "Account",
-      "type" : "object",
-      "required" : [
-        "bucket"
-      ],
-      "properties" : {
-        "bucket" : {
-          "type" : "string"
-        }
-      }
-    },
-    "InputFile" : {
-      "title" : "InputFile",
-      "type" : "object",
-      "required" : [
-        "remote",
-        "local"
-      ],
-      "properties" : {
-        "remote" : {
-          "type" : "string"
-        },
-        "local" : {
-          "type" : "string"
-        },
-        "cacheKey" : {
-          "anyOf" : [
-            {
-              "$ref" : "#/$defs/Cache"
-            },
-            {
-              "type" : "null"
-            }
-          ]
-        }
-      }
-    },
-    "Cache" : {
-      "title" : "Cache",
-      "type" : "object",
-      "required" : [
-        "hash"
-      ],
-      "properties" : {
-        "hash" : {
-          "type" : "string"
-        },
-        "extraction" : {
-          "anyOf" : [
-            {
-              "$ref" : "#/$defs/Extraction"
-            },
-            {
-              "type" : "null"
-            }
-          ]
-        }
-      }
-    },
-    "Extraction" : {
-      "title" : "Extraction",
-      "oneOf" : [
-        {
-          "$ref" : "#/$defs/TarGZ"
-        }
-      ]
-    },
-    "TarGZ" : {
-      "title" : "TarGZ",
-      "type" : "object"
-    },
-    "OutputFile" : {
-      "title" : "OutputFile",
-      "type" : "object",
-      "required" : [
-        "local",
-        "remote"
-      ],
-      "properties" : {
-        "local" : {
-          "type" : "string"
-        },
-        "remote" : {
-          "type" : "string"
-        }
-      }
-    },
-    "Resource" : {
-      "title" : "Resource",
-      "oneOf" : [
-        {
-          "$ref" : "#/$defs/Core"
-        },
-        {
-          "$ref" : "#/$defs/MaxTime"
-        }
-      ]
-    },
-    "Core" : {
-      "title" : "Core",
-      "type" : "object",
-      "required" : [
-        "core"
-      ],
-      "properties" : {
-        "core" : {
-          "type" : "integer",
-          "format" : "int32"
-        }
-      }
-    },
-    "MaxTime" : {
-      "title" : "MaxTime",
-      "type" : "object",
-      "required" : [
-        "second"
-      ],
-      "properties" : {
-        "second" : {
-          "type" : "integer",
-          "format" : "int32"
-        }
-      }
-    }
-  },
-  "title" : "Message",
-  "oneOf" : [
-    {
-      "$ref" : "#/$defs/Canceled"
-    },
-    {
-      "$ref" : "#/$defs/Completed"
-    },
-    {
-      "$ref" : "#/$defs/Failed"
-    },
-    {
-      "$ref" : "#/$defs/Running"
-    },
-    {
-      "$ref" : "#/$defs/Submitted"
-    }
-  ]
+  "version": "1",
+  "id": "blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76",
+  "type": "running"
 }
 ```
 
+Once the job is completed, the status looks like:
+```json
+{
+  "version": "1",
+  "id": "blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76",
+  "type": "completed"
+}
+```
 
+### Getting the output file
+
+You can download the output of your job from the `/job/output` directory:
+```bash
+mc cat babar-user/reuillon/job/output/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76/output.txt
+```
+
+Displays:
+```bash
+Hello MiniClust
+```
+
+## JSON Schema
+
+You can get the complete JSON Schema of messages you can exchange with MiniClust [here](Schema.md).

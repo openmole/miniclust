@@ -85,7 +85,7 @@ Directories used in the user bucket:
 
 To submit a job, upload a valid Submitted json file in fn the directory `/job/submit`. The name of the file should be hashed using blake3 and be named `blake3:hashvalue`.
 
-For instance you can describe a simple job:
+For instance, you can describe a simple job:
 ```scala mdoc:passthrough
 import miniclust.message.*
 val msg =
@@ -112,20 +112,48 @@ b3sum test.json
 
 Then copy the file in the submit directory and name it using the blake3 hash:
 ```bash
-mc cp test.json minic/login/job/submit/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76
-```
-TODO: document the protocol.
-
-## The messages JSON schema
-
-If you which to generate a client in another language here is the JSON schema of the messages:
-```scala mdoc:passthrough
-import miniclust.documentation.*
-val schema = Schema.run
-println(
-  s"""```json
-    |$schema
-    |```
-    |""".stripMargin)
+mc cp test.json minio/login/job/submit/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76
 ```
 
+### Check the status
+
+Your job description stays in the submit directory until it is processed by a worker. As soon as it is the case
+you can then check the status of you jobs in the status directory.
+
+```bash
+mc cat minio/login/job/status/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76 | jq
+```
+
+Produces:
+```json
+{
+  "version": "1",
+  "id": "blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76",
+  "type": "running"
+}
+```
+
+Once the job is completed, the status looks like:
+```json
+{
+  "version": "1",
+  "id": "blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76",
+  "type": "completed"
+}
+```
+
+### Getting the output file
+
+You can download the output of your job from the `/job/output` directory:
+```bash
+mc cat babar-user/reuillon/job/output/blake3:0711b75d83c9956763326d36bbed042a18305902ebd9687a27e565117f535b76/output.txt
+```
+
+Displays:
+```bash
+Hello MiniClust
+```
+
+## JSON Schema
+
+You can get the complete JSON Schema of messages you can exchange with MiniClust [here](Schema.md).

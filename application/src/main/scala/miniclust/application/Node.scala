@@ -84,8 +84,6 @@ def loadConfiguration(configurationFile: File) =
       val c = loadConfiguration(config.configurationFile.get)
       given FileCache = c.fileCache
 
-      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
-
       val pool = ComputingResource(c.cores)
       val accounting = UsageHistory(48)
       

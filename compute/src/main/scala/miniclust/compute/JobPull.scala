@@ -134,7 +134,7 @@ object JobPull:
           case r: Message.Submitted => r
           case m => throw new IllegalArgumentException(s"Invalid message type ${m.getClass}, should be Run")
 
-      if run.account.bucket != bucket.name then throw IllegalArgumentException(s"Incorrect bucket name ${run.account.bucket}")
+      if run.account.bucket != bucket.name then throw IllegalArgumentException(s"Incorrect bucket name: ${run.account.bucket}")
 
       run
 

@@ -1,5 +1,7 @@
 # Deploy Miniclust
 
+To easiest way to deploy MiniClust is to launch a docker container with MinIO and then to [run workers using Docker](https://github.com/openmole/miniclust-worker)
+
 ## Existing Minio server
 
 You need to have 2 policies: 

@@ -1,0 +1,9 @@
+minio:
+  url: http://minio:9000
+  key: worker1
+  secret: workerpassword1
+compute:
+  cache: 50000 # local cache size in MB
+  #cores: 10 # default to nproc
+  user: job 
+  work-directory: /tmp

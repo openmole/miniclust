@@ -1,0 +1,45 @@
+
+services:
+  minio:
+    image: quay.io/minio/minio
+    ports:
+      - "127.0.0.1:9900:9000"
+      - "127.0.0.1:9901:9001"
+    command: [ "server", "--console-address", ":9001", "/data" ]
+    environment:
+      MINIO_ROOT_USER: minioAccessKey
+      MINIO_ROOT_PASSWORD: minioSecretKey
+
+  createbuckets:
+    image: quay.io/minio/mc
+    depends_on:
+      - minio
+    restart: on-failure
+    volumes:
+      - ./policy:/policy
+    entrypoint: >
+      /bin/sh -c '
+        sleep 5;
+        /usr/bin/mc alias set minio http://minio:9000 minioAccessKey minioSecretKey;
+        /usr/bin/mc admin policy create minio worker /policy/worker.json;
+        /usr/bin/mc admin policy create minio user /policy/user.json;
+        /usr/bin/mc admin user add minio worker1 workerpassword1;
+        /usr/bin/mc admin policy attach minio worker --user worker1;
+        /usr/bin/mc admin user add minio user1 userpassword1;
+        /usr/bin/mc admin policy attach minio user --user user1;
+        exit 0;
+        '
+
+  miniclust:
+    image: openmole/miniclust:latest
+    container_name: miniclust
+    command: --config "/config/config.yml"
+    volumes:
+      - ./config:/config
+    environment:
+      - HOSTNAME=${HOSTNAME}
+    restart: always
+    privileged: true
+    links:
+      - minio
+

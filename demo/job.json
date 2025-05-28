@@ -1,0 +1,14 @@
+{
+  "version" : "1",
+  "account" : {
+    "bucket" : "user1"
+  },
+  "command" : "sleep 10 && echo Hello From MiniClust!",
+  "input-file" : [],
+  "output-file" : [],
+  "std-out" : "output.txt",
+  "std-err" : null,
+  "resource" : [],
+  "noise" : null,
+  "type" : "submitted"
+}

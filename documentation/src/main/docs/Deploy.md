@@ -1,6 +1,18 @@
 # Deploy Miniclust
 
-To easiest way to deploy MiniClust is to launch a docker container with MinIO and then to [run workers using Docker](https://github.com/openmole/miniclust-worker)
+## Using docker
+
+The simplest way to deploy MiniClust is certainly to run a Minio server in docker
+
+You should first deploy a Minio server. To do that you can start from [our demo project](demo/README.md). 
+
+From the demo example, you should probably:
+- add a volume for to persist the data of minio,
+- secure the passwords,
+- expose the port to the outside world using an https connection. 
+
+Then you should deploy MiniClust workers on the computers you want to federate in the cluster. To do that you should 
+create a user and attach it to the `worker` policy and then [run workers using Docker](https://github.com/openmole/miniclust-worker)
 
 ## Existing Minio server
 

@@ -17,8 +17,9 @@ The functionalities of MiniClust:
 ## Documentation
 
 You can check the following docs:
-- [Submitting jobs](documentation/content/Submit.md)
-- [Deploy a cluster](documentation/content/Deploy.md)
+- [Demo Cluster](demo/README.md)
+- [Submitting jobs](Submit.md)
+- [Deploy a cluster](Deploy.md)
 - [Run a worker with Docker](https://github.com/openmole/miniclust-worker)
 
 ## Licences

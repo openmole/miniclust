@@ -3,6 +3,13 @@
 
 This projet demonstrate a miniclust service with a single worker node using docker compose.
 
+## Clone the repo
+
+```bash
+git clone https://github.com/openmole/miniclust.git
+cd demo
+```
+
 ## Launch MiniClust
 
 Run:

@@ -90,7 +90,7 @@ object JobPull:
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
       RunningJob.parse(i.name.drop(prefix.size), i.lastModified.get)
 
-  def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory)(using config: JobPullConfig): SelectedJob | NotSelected =
+  def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory, random: Random): SelectedJob | NotSelected =
 //    val runningJob = runningJobs(coordinationBucket)
 //    val runningByBucket = runningJob.groupBy(r => r.bucketName).view.mapValues(_.size).toMap
 
@@ -111,7 +111,7 @@ object JobPull:
 
     jobs match
       case Some(u) =>
-        val (bucket, id) = u(config.random.nextInt(u.size))
+        val (bucket, id) = u(random.nextInt(u.size))
         validate(minio, bucket, id) match
           case Success(s) =>
             val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
@@ -182,8 +182,8 @@ object JobPull:
 
 
 
-  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory)(using config: JobPullConfig): SubmittedJob =
-    val job = selectJob(minio, coordinationBucket, pool, accounting)
+  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory, random: Random): Option[SubmittedJob] =
+    val job = selectJob(minio, coordinationBucket, pool, accounting, random)
 
     job match
       case job: InvalidJob =>
@@ -194,7 +194,7 @@ object JobPull:
           Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
           checkOut(minio, coordinationBucket, job)
 
-        pull(minio, coordinationBucket, pool, accounting)
+        pull(minio, coordinationBucket, pool, accounting, random)
       case job: SubmittedJob =>
         def result =
           checkIn(minio, coordinationBucket, job) match
@@ -213,36 +213,40 @@ object JobPull:
               throw e
 
         tryResult match
-          case Some(j) => j
+          case Some(j) => Some(j)
           case None =>
             ComputingResource.dispose(job.allocated)
-            pull(minio, coordinationBucket, pool, accounting)
+            pull(minio, coordinationBucket, pool, accounting, random)
 
-      case NotSelected.JobRemoved => pull(minio, coordinationBucket, pool, accounting)
-      case NotSelected.NotFound | NotSelected.NotEnoughResource =>
-        Thread.sleep(config.random.nextInt(10000))
-        pull(minio, coordinationBucket, pool, accounting)
+      case NotSelected.JobRemoved => pull(minio, coordinationBucket, pool, accounting, random)
+      case NotSelected.NotFound | NotSelected.NotEnoughResource => None
+//        Thread.sleep(config.random.nextInt(10000))
+//        pull(minio, coordinationBucket, pool, accounting)
 
 
-  def pullJob(minio: Minio, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: UsageHistory, nodeId: String)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
-    val job = JobPull.pull(minio, coordinationBucket, pool, accounting)
-    val heartBeat = JobPull.startHeartBeat(minio, coordinationBucket, job)
-    Background.run:
-      val start = Instant.now()
-      try
-        logger.info(s"${job.id}: running")
-        val msg = Compute.run(minio, coordinationBucket, job)
-        logger.info(s"${job.id}: job finished ${msg}")
+//  def pullJob(minio: Minio, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: UsageHistory, nodeId: String)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
+//    val job = JobPull.pull(minio, coordinationBucket, pool, accounting)
+//    val heartBeat = JobPull.startHeartBeat(minio, coordinationBucket, job)
+//
+//    Background.run:
+//      executeJob(minio, coordinationBucket, job, accounting, nodeId, heartBeat)
 
-        Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeId: String, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
+    val start = Instant.now()
+    try
+      logger.info(s"${job.id}: running")
+      val msg = Compute.run(minio, coordinationBucket, job)
+      logger.info(s"${job.id}: job finished ${msg}")
 
-        if msg.canceled then JobPull.clearCancel(minio, job.bucket, job.id)
+      Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
-        Background.run:
-          val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)
-          MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
-      finally
-        ComputingResource.dispose(job.allocated)
-        accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
-        heartBeat.stop()
-        JobPull.checkOut(minio, coordinationBucket, job)
+      if msg.canceled then JobPull.clearCancel(minio, job.bucket, job.id)
+
+      Background.run:
+        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)
+        MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
+    finally
+      ComputingResource.dispose(job.allocated)
+      accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
+      heartBeat.stop()
+      JobPull.checkOut(minio, coordinationBucket, job)

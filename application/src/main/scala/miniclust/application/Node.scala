@@ -122,6 +122,7 @@ def loadConfiguration(configurationFile: File) =
                 case None =>
                   if pullers.tryDecrement()
                   then stop = true
+                  else Thread.sleep(5000)
             catch
               case e: Exception =>
                 Compute.logger.log(Level.SEVERE, "Error in run loop", e)
@@ -129,6 +130,7 @@ def loadConfiguration(configurationFile: File) =
           Node.logger.info(s"Stop a puller, currently ${pullers.value}")
 
         computeConfig.baseDirectory.delete(true)
+      end runPuller
 
       runPuller()
       Node.logger.info(s"Worker is running, pulling jobs, resources: ${c.cores} cores")

@@ -178,7 +178,7 @@ object JobPull:
 
           Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
-          logger.info(s"Removed job without heartbeat: ${j.id}")
+          logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
 
 
 
@@ -240,7 +240,8 @@ object JobPull:
 
       Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
-      if msg.canceled then JobPull.clearCancel(minio, job.bucket, job.id)
+      if msg.canceled
+      then JobPull.clearCancel(minio, job.bucket, job.id)
 
       Background.run:
         val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)

@@ -141,8 +141,8 @@ object JobPull:
   def checkIn(minio: Minio, coordinationBucket: Bucket, job: SelectedJob): Boolean =
     Minio.upload(minio, coordinationBucket, job.id, RunningJob.path(job.bucket.name, job.id), overwrite = false)
 
-  def checkOut(minio: Minio, coordinationBucket: Bucket, job: SelectedJob): Unit =
-    logger.info(s"${job.id}: checkout delete ${RunningJob.path(job.bucket.name, job.id)}")
+  def clearCheckIn(minio: Minio, coordinationBucket: Bucket, job: SelectedJob): Unit =
+    logger.info(s"${job.id}: clear check in ${RunningJob.path(job.bucket.name, job.id)}")
     Minio.delete(minio, coordinationBucket, RunningJob.path(job.bucket.name, job.id))
 
   def removeAbandonedJobs(minio: Minio, coordinationBucket: Bucket) =
@@ -192,7 +192,7 @@ object JobPull:
           logger.info(s"${job.id}: failed to validate, ${job.exception.getMessage}")
           Minio.upload(minio, job.bucket, MiniClust.generateMessage(Message.Failed(job.id, Tool.exceptionToString(job.exception), Message.Failed.Reason.Invalid)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
           Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
-          checkOut(minio, coordinationBucket, job)
+          clearCheckIn(minio, coordinationBucket, job)
 
         pull(minio, coordinationBucket, pool, accounting, random)
       case job: SubmittedJob =>
@@ -238,16 +238,16 @@ object JobPull:
       val msg = Compute.run(minio, coordinationBucket, job)
       logger.info(s"${job.id}: job finished ${msg}")
 
-      Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-
-      if msg.canceled
-      then JobPull.clearCancel(minio, job.bucket, job.id)
-
       Background.run:
+        Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
+
+        if msg.canceled
+        then JobPull.clearCancel(minio, job.bucket, job.id)
+
         val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)
         MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
     finally
       ComputingResource.dispose(job.allocated)
-      accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
       heartBeat.stop()
-      JobPull.checkOut(minio, coordinationBucket, job)
+      accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
+      JobPull.clearCheckIn(minio, coordinationBucket, job)

@@ -7,6 +7,7 @@ import miniclust.compute.*
 import miniclust.compute.JobPull.executeJob
 import miniclust.message.{MiniClust, Minio}
 
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, Semaphore}
@@ -33,6 +34,14 @@ import scala.util.hashing.MurmurHash3
 
 object Node:
   val logger = Logger.getLogger(getClass.getName)
+
+  def minDuration[T](seconds: Int)(f: => T): T =
+    val start = Instant.now()
+    try f
+    finally
+      val end = Instant.now()
+      val elapsed = end.getEpochSecond - start.getEpochSecond
+      if elapsed < seconds then Thread.sleep(seconds - elapsed)
 
 def loadConfiguration(configurationFile: File) =
   val configuration = Configuration.read(configurationFile)
@@ -67,7 +76,7 @@ def loadConfiguration(configurationFile: File) =
   )
 
 
-@main def run(args: String*) =
+@main def run(args: String*) = Node.minDuration(30):
   case class Args(configurationFile: Option[File] = None)
 
   import scopt.OParser

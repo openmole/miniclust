@@ -41,7 +41,7 @@ object Node:
     finally
       val end = Instant.now()
       val elapsed = end.getEpochSecond - start.getEpochSecond
-      if elapsed < seconds then Thread.sleep(seconds - elapsed)
+      if elapsed < seconds then Thread.sleep((seconds - elapsed) * 1000)
 
 def loadConfiguration(configurationFile: File) =
   val configuration = Configuration.read(configurationFile)

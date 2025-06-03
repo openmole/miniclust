@@ -86,7 +86,7 @@ object MiniClust:
       import com.github.f4b6a3.ulid.*
       val content = usage.asJson.noSpaces
       val ulid = UlidCreator.getUlid
-      val path = s"${Coordination.accountingDirectory}/${usage.bucket}/${ulid.toLowerCase}"
+      val path = s"${Coordination.accountingDirectory}/${ulid.toLowerCase}"
       Minio.upload(minio, coordinationBucket, content, path)
 
   case class JobResourceUsage(bucket: String, identifier: String, key: String, second: Long, resource: Seq[Message.Resource], finalState: Message)

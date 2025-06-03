@@ -68,8 +68,7 @@ def loadConfiguration(configurationFile: File) =
 
 
 @main def run(args: String*) =
-  case class Args(
-    configurationFile: Option[File] = None)
+  case class Args(configurationFile: Option[File] = None)
 
   import scopt.OParser
   val builder = OParser.builder[Args]
@@ -89,7 +88,7 @@ def loadConfiguration(configurationFile: File) =
 
       val pool = ComputingResource(c.cores)
       val accounting = UsageHistory(48)
-      
+
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pool, c.random)
       val pullers = Tool.Counter(1, 10)
 

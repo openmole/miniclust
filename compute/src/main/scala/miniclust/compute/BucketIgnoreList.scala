@@ -20,15 +20,19 @@ import java.time.Instant
  */
 
 class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
-  val firstCheck = collection.mutable.Map[String, Long]()
-  val lastCheck = collection.mutable.Map[String, Long]()
+  private val firstCheck = collection.mutable.Map[String, Long]()
+  private val lastCheck = collection.mutable.Map[String, Long]()
 
   def seenEmpty(bucket: String): Unit = synchronized:
     val now = Instant.now().getEpochSecond
     firstCheck.getOrElseUpdate(bucket, now)
     lastCheck.put(bucket, now)
 
-  def shouldBeChecked(bucket: String) = synchronized:
+  def seenNotEmpty(bucket: String): Unit = synchronized:
+    firstCheck.remove(bucket)
+    lastCheck.remove(bucket)
+
+  def shouldBeChecked(bucket: String): Boolean = synchronized:
     val now = Instant.now().getEpochSecond
     def emptySinceLong = firstCheck.get(bucket).map(t => (now - t) > ignoreAfter)
     def checkedRecently = lastCheck.get(bucket).map(t => (now - t) < checkAfter)
@@ -37,7 +41,3 @@ class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
       !e || !c
     .getOrElse(true)
 
-
-  def seenNotEmpty(bucket: String) = synchronized:
-    firstCheck.remove(bucket)
-    lastCheck.remove(bucket)

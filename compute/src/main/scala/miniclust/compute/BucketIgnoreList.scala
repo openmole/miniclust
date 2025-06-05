@@ -38,6 +38,6 @@ class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
     .getOrElse(true)
 
 
-  def notEmpty(bucket: String) = synchronized:
+  def seenNotEmpty(bucket: String) = synchronized:
     firstCheck.remove(bucket)
     lastCheck.remove(bucket)

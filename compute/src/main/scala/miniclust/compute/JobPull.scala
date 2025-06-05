@@ -120,6 +120,7 @@ object JobPull:
         partition(_._2.isEmpty)
 
     empty.foreach(b => state.bucketIgnoreList.seenEmpty(b._1.name))
+    notEmpty.foreach(b => state.bucketIgnoreList.seenNotEmpty(b._1.name))
 
     def jobs = notEmpty.sortBy((b, _) => state.usageHistory.quantity(b.name)).headOption
 

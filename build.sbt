@@ -44,6 +44,13 @@ lazy val message = project
     libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.3",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoKeys := Seq(
+      version,
+      BuildInfoKey.action("buildTime") { System.currentTimeMillis }),
+    buildInfoPackage := "miniclust"
+  )
 
 lazy val documentation = project
   .in(file("documentation"))

@@ -95,10 +95,16 @@ def loadConfiguration(configurationFile: File) =
       val c = loadConfiguration(config.configurationFile.get)
       given FileCache = c.fileCache
 
-      val pool = ComputingResource(c.cores)
-      val accounting = UsageHistory(48)
+      val pullState = JobPull.state(
+        cores = c.cores,
+        history = 48,
+        ignoreAfter = 3600,
+        checkAfter = 60
+      )
 
-      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pool, c.random)
+      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pullState.computingResource, c.random)
+
+      val maxPullers = math.min(10, c.cores / 5)
       val pullers = Tool.Counter(1, 10)
 
       def runPuller(): Unit =
@@ -116,14 +122,14 @@ def loadConfiguration(configurationFile: File) =
           while !stop
           do
             try
-              val job = JobPull.pull(c.minio, c.coordinationBucket, pool, accounting, c.random)
+              val job = JobPull.pull(c.minio, c.coordinationBucket, pullState, c.random)
 
               job match
                 case Some(job) =>
                   val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job)
 
                   Background.run:
-                    JobPull.executeJob(c.minio, c.coordinationBucket, job, accounting, c.activity.identifier, heartBeat)
+                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.activity.identifier, heartBeat)
 
                   if pullers.tryIncrement()
                   then runPuller()

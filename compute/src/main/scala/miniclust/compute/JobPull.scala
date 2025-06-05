@@ -40,7 +40,21 @@ object JobPull:
 
   val virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()
 
-  case class JobPullConfig(random: util.Random)
+  def state(
+    cores: Int,
+    history: Int,
+    ignoreAfter: Int,
+    checkAfter: Int) =
+    State(
+      ComputingResource(cores),
+      UsageHistory(history),
+      BucketIgnoreList(ignoreAfter = ignoreAfter, checkAfter = checkAfter)
+    )
+
+  case class State(
+    computingResource: ComputingResource,
+    usageHistory: UsageHistory,
+    bucketIgnoreList: BucketIgnoreList)
 
   extension (v: SelectedJob)
     def id =
@@ -90,33 +104,33 @@ object JobPull:
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
       RunningJob.parse(i.name.drop(prefix.size), i.lastModified.get)
 
-  def selectJob(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory, random: Random): SelectedJob | NotSelected =
-//    val runningJob = runningJobs(coordinationBucket)
-//    val runningByBucket = runningJob.groupBy(r => r.bucketName).view.mapValues(_.size).toMap
+  def selectJob(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): SelectedJob | NotSelected =
 
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
       Minio.listObjects(minio, bucket, prefix = prefix, recursive = true).map: i =>
-        (bucket, i.name.drop(prefix.length))
+        i.name.drop(prefix.length)
 
-    val jobs =
-      val buckets = Minio.listUserBuckets(minio)
-      buckets.sortBy(b => accounting.quantity(b.name)).view.map(userJobs).find(_.nonEmpty)
+    val buckets = Minio.listUserBuckets(minio)
 
-//    val allUserJobs =
-//      Minio.listUserBuckets(server).
-//        sortBy(b => runningByBucket.getOrElse(b.name, 0)).
-//        map(userJobs).
-//        filterNot(_.isEmpty)
+    val (empty, notEmpty) =
+      buckets.
+        filter(b => state.bucketIgnoreList.shouldBeChecked(b.name)).
+        map(b => b -> userJobs(b)).
+        partition(_._2.isEmpty)
+
+    empty.foreach(b => state.bucketIgnoreList.seenEmpty(b._1.name))
+
+    def jobs = notEmpty.sortBy((b, _) => state.usageHistory.quantity(b.name)).headOption
 
     jobs match
-      case Some(u) =>
-        val (bucket, id) = u(random.nextInt(u.size))
+      case Some((bucket, u)) =>
+        val id = u(random.nextInt(u.size))
         validate(minio, bucket, id) match
           case Success(s) =>
             val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
             val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
-            ComputingResource.request(pool, cores, time) match
+            ComputingResource.request(state.computingResource, cores, time) match
               case Some(r) => SubmittedJob(bucket, id, s, r)
               case None => NotSelected.NotEnoughResource
           case Failure(e: FileNotFoundException) => NotSelected.JobRemoved
@@ -182,8 +196,8 @@ object JobPull:
 
 
 
-  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, pool: ComputingResource, accounting: UsageHistory, random: Random): Option[SubmittedJob] =
-    val job = selectJob(minio, coordinationBucket, pool, accounting, random)
+  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): Option[SubmittedJob] =
+    val job = selectJob(minio, coordinationBucket, state, random)
 
     job match
       case job: InvalidJob =>
@@ -194,12 +208,12 @@ object JobPull:
           Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
           clearCheckIn(minio, coordinationBucket, job)
 
-        pull(minio, coordinationBucket, pool, accounting, random)
+        pull(minio, coordinationBucket, state, random)
       case job: SubmittedJob =>
         def result =
           checkIn(minio, coordinationBucket, job) match
             case true =>
-              logger.info(s"${job.id}: checked in remaining resources $pool")
+              logger.info(s"${job.id}: checked in remaining resources ${state.computingResource}")
               Minio.upload(minio, job.bucket, MiniClust.generateMessage(Message.Running(job.id)), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
               Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
               Some(job)
@@ -216,9 +230,9 @@ object JobPull:
           case Some(j) => Some(j)
           case None =>
             ComputingResource.dispose(job.allocated)
-            pull(minio, coordinationBucket, pool, accounting, random)
+            pull(minio, coordinationBucket, state, random)
 
-      case NotSelected.JobRemoved => pull(minio, coordinationBucket, pool, accounting, random)
+      case NotSelected.JobRemoved => pull(minio, coordinationBucket, state, random)
       case NotSelected.NotFound | NotSelected.NotEnoughResource => None
 //        Thread.sleep(config.random.nextInt(10000))
 //        pull(minio, coordinationBucket, pool, accounting)

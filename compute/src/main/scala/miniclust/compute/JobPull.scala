@@ -1,6 +1,6 @@
 package miniclust.compute
 
-import miniclust.message.Minio.{Bucket, content, jsonContentType, listObjects}
+import miniclust.message.Minio.{Bucket, content, jsonContentType, listObjects, listUserBuckets}
 import miniclust.message.*
 
 import java.io.FileNotFoundException
@@ -41,14 +41,18 @@ object JobPull:
   val virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()
 
   def state(
+    minio: Minio,
     cores: Int,
     history: Int,
     ignoreAfter: Int,
     checkAfter: Int) =
+    def buckets = listUserBuckets(minio)
+    val ignoreList = BucketIgnoreList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
+
     State(
       ComputingResource(cores),
       UsageHistory(history),
-      BucketIgnoreList(ignoreAfter = ignoreAfter, checkAfter = checkAfter)
+      ignoreList
     )
 
   case class State(

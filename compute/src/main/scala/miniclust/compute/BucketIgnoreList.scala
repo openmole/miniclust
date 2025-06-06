@@ -19,9 +19,20 @@ import java.time.Instant
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+object BucketIgnoreList:
+  def apply(ignoreAfter: Int, checkAfter: Int, initialBuckets: Seq[String]) =
+    val l = new BucketIgnoreList(ignoreAfter, checkAfter)
+    initialBuckets.foreach(l.initialize)
+    l
+
 class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
   private val firstCheck = collection.mutable.Map[String, Long]()
   private val lastCheck = collection.mutable.Map[String, Long]()
+
+  private def initialize(bucket: String) = synchronized:
+    firstCheck.put(bucket, 0)
+    lastCheck.put(bucket, 0)
 
   def seenEmpty(bucket: String): Unit = synchronized:
     val now = Instant.now().getEpochSecond

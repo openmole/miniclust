@@ -96,6 +96,7 @@ def loadConfiguration(configurationFile: File) =
       given FileCache = c.fileCache
 
       val pullState = JobPull.state(
+        minio = c.minio,
         cores = c.cores,
         history = 48,
         ignoreAfter = 3600,

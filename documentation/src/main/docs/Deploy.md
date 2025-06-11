@@ -1,22 +1,69 @@
 # Deploy Miniclust
 
+
+## Demo service
+
+You can try miniclust, by using [our demo project](demo/README.md). This project contains a server and a single worker all in the same docker compose.
+
 ## Using docker
 
 The simplest way to deploy MiniClust is certainly to run a Minio server in docker
 
-You should first deploy a Minio server. To do that you can start from [our demo project](demo/README.md). 
+Here is an example of a production ready minio server:
+```yaml
+services:
+  traefik:
+    image: traefik:v3
+    command:
+      - "--api.dashboard=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=romain.reuillon@iscpif.fr"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+    restart: always
 
-From the demo example, you should probably:
-- add a volume for to persist the data of minio,
-- secure the passwords,
-- expose the port to the outside world using an https connection. 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: xxx
+    volumes:
+      - ./data:/data
+    labels:
+      - "traefik.enable=true"
 
-Then you should deploy MiniClust workers on the computers you want to federate in the cluster. To do that you should 
-create a user and attach it to the `worker` policy and then [run workers using Docker](https://github.com/openmole/miniclust-worker)
+      # Router for S3 API
+      - "traefik.http.routers.minio-api.rule=Host(`babar.openmole.org`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.service=minio-api"
+      - "traefik.http.routers.minio-api.tls.certresolver=myresolver"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
 
-## Existing Minio server
+      # Router for Console UI
+      - "traefik.http.routers.minio-console.rule=Host(`console-babar.openmole.org`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.routers.minio-console.tls.certresolver=myresolver"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+    restart: always
 
-You need to have 2 policies: 
+volumes:
+  minio-data:
+  letsencrypt:
+```
+
+
+Then you should define at least 2 policies: 
  - one for the worker nodes that should be able to write in all user submission buckets and in the coordination bucket (call miniclust by default)
  - one for the users that should be able to use or create if does not exist a buket tagged with the tag: miniclust:submit
 
@@ -59,263 +106,12 @@ The user policy:
 }
 ```
 
-You can now create a worker account / API key, with the worker policy and make workers join your cluster. For that you can use this [docker compose](https://github.com/openmole/miniclust-worker).
+You can now deploy MiniClust workers on the computers you want to federate in the cluster. To do that, you should:
+ - create a user and attach it to the `worker` policy,
+ - and then [run workers using Docker](https://github.com/openmole/miniclust-worker).
 
-You can then create users with the user policy to let them submit jobs.
+You can then create users with the `user` policy to let them submit jobs.
 
 ## On K3S
 
-### Prerequisites
-
-- A machine accessible in ssh
-- 2 domain name, 1 for the minio service and 1 for the mino console access
-
-### Install K3S
-
-Instantiate a machine and make sure to open all the ports in your security group if you are on openstack.
-
-Deploy the server node:
-```
-ssh ${MASTER_USER}@${MASTER_HOST}
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server" sh -s -
-```
-
-To prevent timeouts when uploading/downloading files you should create the following file `/var/lib/rancher/k3s/server/manifests/traefik-config.yaml` on the k3s server.
-The content of the file should be:
-```
-apiVersion: helm.cattle.io/v1
-kind: HelmChartConfig
-metadata:
-  name: traefik
-  namespace: kube-system
-spec:
-  valuesContent: |-
-    additionalArguments:
-      - "--entryPoints.web.transport.respondingTimeouts.readTimeout=0"
-      - "--entryPoints.web.transport.respondingTimeouts.writeTimeout=0"
-      - "--entryPoints.web.transport.respondingTimeouts.idleTimeout=0"
-      - "--entryPoints.websecure.transport.respondingTimeouts.readTimeout=0"
-      - "--entryPoints.websecure.transport.respondingTimeouts.writeTimeout=0"
-      - "--entryPoints.websecure.transport.respondingTimeouts.idleTimeout=0"
-```
-
-And restart k3s:
-`sudo systemctl restart k3s`
-
-Test that the server works. Copy the file `/etc/rancher/k3s/k3s.yaml` on your machine. In the file, replace the master IP address with `MASTER_HOST` address.
-
-```
-export KUBECONFIG=$PWD/k3s.yml
-kubectl get node
-```
-
-
-### Deploy minio
-
-Install the cert manager:
-```
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.17.2 --set crds.enabled=true
-```
-
-Then apply the following yaml:
-```
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: yourmail@domain.com
-    privateKeySecretRef:
-      name: letsencrypt-prod
-    solvers:
-    - http01:
-        ingress:
-          class: traefik
-```
-
-Use following helm charts at https://github.com/minio/minio/tree/master/helm/minio
-
-You should modify some parts of values.yaml
-
-```yaml
-rootUser: "minio"
-rootPassword: "youradminpassword"
-enabled: true
----
-ingress:
-  enabled: true
-  ingressClassName: ~
-  labels: {}
-  annotations: 
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10G"
-  path: /
-  pathType: Prefix
-  hosts:
-    - compute.domain.org
-  tls: 
-    - hosts:
-        - compute.domain.org
-      secretName: minio-tls
----
-consoleIngress:
-  enabled: true
-  ingressClassName: ~
-  labels: {}
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10G"
-  path: /
-  pathType: Prefix
-  hosts:
-    - console.domain.org
-  tls:
-    - hosts:
-        - console.domain.org
-      secretName: console-tls
----
-nodeSelector:
-  node-role.kubernetes.io/control-plane: "true"
----
-policies:
-  - name: userpolicy
-    statements:
-      - effect: Allow
-        resources:
-          - "arn:aws:s3:::${aws:username}"
-          - "arn:aws:s3:::${aws:username}/*"
-        actions:
-          - "s3:*"
-  - name: computepolicy
-    statements:
-      - effect: Allow
-        resources:
-          - "arn:aws:s3:::*"
-        actions:
-          - "s3:*"
----
-users:
-  - accessKey: compute
-    secretKey: computepassword
-    policy: computepolicy
-```
-
-Install minio:
-```
-helm repo add minio https://charts.min.io/
-helm install --namespace minio --create-namespace -f values.yaml minio minio/minio 
-```
-
-To update minio if you change the values.yaml:
-```yaml
-helm upgrade -f values.yaml minio minio/minio  -n minio
-```
-
-### Deploy Miniclust
-
-Change the fields password in:
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: miniclust
-  labels:
-    name: miniclust
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: compute-config-secret
-  namespace: miniclust
-stringData:
-  config.yml: |
-    minio:
-      url: http://minio.minio.svc.cluster.local:9000
-      user: compute
-      password: computepassword
-    compute:
-     work-directory: /tmp
-     cache: 50000
-     sudo: job
----
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: miniclust-compute-daemon
-  namespace: miniclust
-spec:
-  selector:
-    matchLabels:
-      app: miniclust-compute-daemon
-  template:
-    metadata:
-      labels:
-        app: miniclust-compute-daemon
-    spec:
-      initContainers:
-      - name: set-permissions
-        image: busybox
-        securityContext:
-          runAsUser: 0  # Temporarily use root for permission setting
-        command:
-          - sh
-          - -c
-          - cp /etc/miniclust/config.yml /tmp/config.yml && chmod 0400 /tmp/config.yml && chown 1001 /tmp/config.yml
-        volumeMounts:
-          - name: config-volume
-            mountPath: "/etc/miniclust"
-          - name: ephemeral-storage
-            mountPath: /tmp
-      containers:
-      - name: minicluste-compute
-        image: openmole/miniclust:1.0-SNAPSHOT
-        imagePullPolicy: "Always"
-        args:
-          - "/tmp/config.yml"
-        volumeMounts:
-          - name: ephemeral-storage
-            mountPath: /tmp
-          - name: config-volume
-            mountPath: "/etc/miniclust"
-            readOnly: true
-        securityContext:
-          privileged: true
-      volumes:
-      - name: config-volume
-        secret:
-          secretName: compute-config-secret
-          defaultMode: 0400  
-      - name: ephemeral-storage
-        emptyDir: {}
-```
-
-Then apply the manifest:
-```yaml
-kubectl apply -f manifest.yaml
-```
-
-### Adding nodes
-
-You can now add node to the cluster by simply adding them to the k3s cluster.
-
-On another machine:
-```
-TOKEN=youk3s:server:token
-curl -sfL https://get.k3s.io | K3S_URL=https://server.domain.org:6443 K3S_TOKEN=$TOKEN sh -
-```
-
-You can also remove them if needed
-
-### Using the cluster
-
-You can now create user by creating new user with the userpolicy on the minio console.
-
-TODO: describe how to submit, cancel, follow jobs and upload/download input an output files.
-In miniclust, jobs can be submitted and piloted by putting and getting simple json files on the minio server.
-But for now you can check the example in scala in the folder submit.
+If you want to use kube, you can refer to [deploy miniclust on K3S](K3S.md).

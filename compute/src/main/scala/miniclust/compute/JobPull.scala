@@ -168,25 +168,12 @@ object JobPull:
     val date = Minio.date(minio)
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
 
-    case class Directory(path: String)
-
-    val oldJobs =
-      Minio.listObjects(minio, coordinationBucket, prefix = prefix, recursive = true).view.flatMap: i =>
-        if i.dir
-        then None //Some(Directory(o.objectName()))
-        else
-          val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
-          if (date - j.ping) > 60
-          then Some(j)
-          else None
-
-    for
-      j <- oldJobs
-    do
-      j match
-//          case d: Directory =>
-//            Minio.delete(minio, coordinationBucket, d.path)
-        case j: RunningJob =>
+    Minio.listAndApply(minio, coordinationBucket, prefix = prefix, recursive = true, maxKeys = Some(100)): i =>
+      if !i.dir
+      then
+        val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
+        if (date - j.ping) > 60
+        then
           Minio.upload(
             minio,
             Bucket(j.bucketName),
@@ -198,7 +185,6 @@ object JobPull:
           Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
           logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
-
 
 
   @tailrec def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): Option[SubmittedJob] =

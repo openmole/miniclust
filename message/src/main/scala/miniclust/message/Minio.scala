@@ -197,7 +197,6 @@ object Minio:
       try
         local match
           case local: File =>
-
             c.putObject(arg.build(), local.toPath)
           case local: String =>
             val requestBody = RequestBody.fromString(local)
@@ -210,39 +209,51 @@ object Minio:
 
   case class MinioObject(name: String, dir: Boolean, lastModified: Option[Long])
 
+
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, maxKeys: Option[Int] = None)(f: MinioObject => Unit) =
+    val listRequest =
+      val p =
+        if addSlash && !prefix.endsWith("/")
+        then s"$prefix/"
+        else prefix
+
+      def r = ListObjectsV2Request.builder()
+        .bucket(bucket.name)
+        .prefix(p)
+
+      def r2 =
+        maxKeys match
+          case Some(k) => r.maxKeys(k)
+          case None => r
+
+      if !recursive
+      then r2.delimiter("/")
+      else r2
+
+    var token: String = null
+    var more = true
+    val response = scala.collection.mutable.ListBuffer[MinioObject]()
+
+    while more
+    do
+      val listedObjects =
+        withClient(minio): c =>
+          c.listObjectsV2(listRequest.continuationToken(token).build())
+
+      token = listedObjects.nextContinuationToken()
+
+      if !listedObjects.isTruncated
+      then more = false
+
+      listedObjects.contents().asScala.foreach: c =>
+        f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
+
   def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true) =
-    withClient(minio): c =>
-      val listRequest =
-        val p =
-          if addSlash && !prefix.endsWith("/")
-          then s"$prefix/"
-          else prefix
+    val response = scala.collection.mutable.ListBuffer[MinioObject]()
+    listAndApply(minio, bucket, prefix, recursive, addSlash): c =>
+      response.addOne(c)
 
-        val r = ListObjectsV2Request.builder()
-          .bucket(bucket.name)
-          .prefix(p)
-
-        if !recursive
-        then r.delimiter("/")
-        else r
-
-      var token: String = null
-      var more = true
-      val response = scala.collection.mutable.ListBuffer[MinioObject]()
-
-      while more
-      do
-        val listedObjects = c.listObjectsV2(listRequest.continuationToken(token).build())
-        token = listedObjects.nextContinuationToken()
-
-        if !listedObjects.isTruncated
-        then more = false
-
-        response.addAll:
-          listedObjects.contents().asScala.map: c =>
-            MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond))
-
-      response.toSeq
+    response.toSeq
 
 //  def lazyListObjects[T](minio: S3Minio, bucket: Bucket, prefix: String, recursive: Boolean = false)(f: Iterable[Result[Item]] => T): T =
 //    withClient(minio): c =>

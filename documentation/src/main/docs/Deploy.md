@@ -1,9 +1,9 @@
 # Deploy Miniclust
 
 
-## Demo service
+## Demo cluster
 
-You can try miniclust, by using [our demo project](demo/README.md). This project contains a server and a single worker all in the same docker compose.
+You can try miniclust, by using [our demo cluster](demo/README.md). This project contains a server and a single worker all in the same docker compose.
 
 ## Using docker
 

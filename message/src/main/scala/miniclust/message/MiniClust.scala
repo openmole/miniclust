@@ -69,8 +69,8 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived
 
-    def apply(cores: Int, key: String) =
-      new WorkerActivity(cores, 0, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString, key, Some(WorkerActivity.MiniClust()))
+    def apply(cores: Int, key: String, hostname: Option[String]) =
+      new WorkerActivity(cores, 0, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString, key, hostname, Some(WorkerActivity.MiniClust()))
 
     def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
       val content = activity.asJson.noSpaces
@@ -87,6 +87,7 @@ object MiniClust:
     ip: String,
     identifier: String,
     key: String,
+    hostname: Option[String],
     miniclust: Option[WorkerActivity.MiniClust])
 
   object JobResourceUsage:

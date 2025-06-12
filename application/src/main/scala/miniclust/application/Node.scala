@@ -47,7 +47,7 @@ def loadConfiguration(configurationFile: File) =
   val configuration = Configuration.read(configurationFile)
 
   val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
-  val activity = MiniClust.WorkerActivity(cores, configuration.minio.key)
+  val activity = MiniClust.WorkerActivity(cores, configuration.minio.key, Option(System.getenv("HOSTNAME")))
 
   val baseDirectory = File(configuration.compute.workDirectory)
   baseDirectory.createDirectories()
@@ -62,7 +62,7 @@ def loadConfiguration(configurationFile: File) =
 
   val random = util.Random(seed)
 
-  val nodeInfo = JobPull.NodeInfo(activity.identifier, Option(System.getenv("HOSTNAME")))
+  val nodeInfo = JobPull.NodeInfo(activity.identifier, activity.hostname)
 
   (
     configuration = configuration,

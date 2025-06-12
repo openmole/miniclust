@@ -213,7 +213,7 @@ object Minio:
   case class MinioObject(name: String, dir: Boolean, lastModified: Option[Long])
 
 
-  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, maxKeys: Option[Int] = None)(f: MinioObject => Unit) =
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, maxKeys: Option[Int] = None, startAfter: Option[String] = None)(f: MinioObject => Unit) =
     withClient(minio): c =>
       val listRequest =
         val p =
@@ -234,7 +234,7 @@ object Minio:
         then r2.delimiter("/")
         else r2
 
-      var lastKey: Option[String] = None
+      var lastKey: Option[String] = startAfter
       var more = true
       val response = scala.collection.mutable.ListBuffer[MinioObject]()
 

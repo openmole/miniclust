@@ -65,6 +65,7 @@ object Minio:
   private def httpClient(server: Server) =
     val builder =
       ApacheHttpClient.builder().
+        connectionAcquisitionTimeout(Duration.ofSeconds(server.timeout)).
         connectionTimeout(Duration.ofSeconds(server.timeout)).
         socketTimeout(Duration.ofSeconds(server.timeout))
 
@@ -144,7 +145,9 @@ object Minio:
       while more
       do
         val listedObjects = c.listObjectsV2(listRequest)
-        if !listedObjects.isTruncated then more = false
+
+        if !listedObjects.isTruncated
+        then more = false
 
         val keys = listedObjects.contents().asScala.map(_.key())
 
@@ -211,42 +214,44 @@ object Minio:
 
 
   def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, maxKeys: Option[Int] = None)(f: MinioObject => Unit) =
-    val listRequest =
-      val p =
-        if addSlash && !prefix.endsWith("/")
-        then s"$prefix/"
-        else prefix
+    withClient(minio): c =>
+      val listRequest =
+        val p =
+          if addSlash && !prefix.endsWith("/")
+          then s"$prefix/"
+          else prefix
 
-      def r = ListObjectsV2Request.builder()
-        .bucket(bucket.name)
-        .prefix(p)
+        def r = ListObjectsV2Request.builder()
+          .bucket(bucket.name)
+          .prefix(p)
 
-      def r2 =
-        maxKeys match
-          case Some(k) => r.maxKeys(k)
-          case None => r
+        def r2 =
+          maxKeys match
+            case Some(k) => r.maxKeys(k)
+            case None => r
 
-      if !recursive
-      then r2.delimiter("/")
-      else r2
+        if !recursive
+        then r2.delimiter("/")
+        else r2
 
-    var token: String = null
-    var more = true
-    val response = scala.collection.mutable.ListBuffer[MinioObject]()
+      var lastKey: Option[String] = None
+      var more = true
+      val response = scala.collection.mutable.ListBuffer[MinioObject]()
 
-    while more
-    do
-      val listedObjects =
-        withClient(minio): c =>
-          c.listObjectsV2(listRequest.continuationToken(token).build())
+      while more
+      do
+        val listedObjects =
+            lastKey match
+              case Some(k) => c.listObjectsV2(listRequest.startAfter(k).build())
+              case None => c.listObjectsV2(listRequest.build())
 
-      token = listedObjects.nextContinuationToken()
+        listedObjects.contents().asScala.foreach: c =>
+          f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
+          lastKey = Some(c.key())
 
-      if !listedObjects.isTruncated
-      then more = false
+        if !listedObjects.isTruncated
+        then more = false
 
-      listedObjects.contents().asScala.foreach: c =>
-        f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
 
   def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true) =
     val response = scala.collection.mutable.ListBuffer[MinioObject]()

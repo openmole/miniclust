@@ -69,26 +69,42 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived
 
-    def apply(cores: Int, key: String, hostname: Option[String]) =
-      new WorkerActivity(cores, 0, Tool.queryExternalIP.getOrElse("NA"), UUID.randomUUID().toString, key, hostname, Some(WorkerActivity.MiniClust()))
+    def apply(cores: Int, nodeInfo: NodeInfo) =
+      new WorkerActivity(cores, 0, nodeInfo, WorkerActivity.MiniClust())
 
     def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
       val content = activity.asJson.noSpaces
-      Minio.upload(minio, coordinationBucket, content, Coordination.activityFile(activity.identifier))
+      Minio.upload(minio, coordinationBucket, content, Coordination.activityFile(activity.nodeInfo.id))
 
     case class MiniClust(
       version: String = miniclust.BuildInfo.version,
       build: Long = miniclust.BuildInfo.buildTime) derives derivation.ConfiguredCodec
 
-
   case class WorkerActivity(
     cores: Int,
     used: Int,
+    nodeInfo: NodeInfo,
+    miniclust: WorkerActivity.MiniClust)
+
+
+  object NodeInfo:
+    given derivation.Configuration = Tool.jsonConfiguration
+    given Codec[NodeInfo] = derivation.ConfiguredCodec.derived
+
+    def apply(key: String, hostname: Option[String]) =
+      new NodeInfo(
+        ip = Tool.queryExternalIP.getOrElse("NA"),
+        id = UUID.randomUUID().toString,
+        key = key,
+        hostname = hostname
+      )
+
+  case class NodeInfo(
+    id: String,
     ip: String,
-    identifier: String,
     key: String,
-    hostname: Option[String],
-    miniclust: Option[WorkerActivity.MiniClust])
+    hostname: Option[String])
+
 
   object JobResourceUsage:
     given derivation.Configuration = Tool.jsonConfiguration
@@ -105,9 +121,7 @@ object MiniClust:
 
   case class JobResourceUsage(
     bucket: String,
-    identifier: String,
-    key: String,
-    hostname: Option[String],
+    nodeInfo: NodeInfo,
     second: Long,
     resource: Seq[Message.Resource],
     finalState: Message)

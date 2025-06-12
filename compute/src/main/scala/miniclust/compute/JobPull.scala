@@ -10,7 +10,6 @@ import scala.util.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.RunningJob.{name, path}
-
 import scala.annotation.tailrec
 
 
@@ -59,10 +58,6 @@ object JobPull:
     computingResource: ComputingResource,
     usageHistory: UsageHistory,
     bucketIgnoreList: BucketIgnoreList)
-
-  case class NodeInfo(
-    nodeId: String,
-    hostname: Option[String])
 
   extension (v: SelectedJob)
     def id =
@@ -230,7 +225,7 @@ object JobPull:
       case NotSelected.JobRemoved => pull(minio, coordinationBucket, state, random)
       case NotSelected.NotFound | NotSelected.NotEnoughResource => None
 
-  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: NodeInfo, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
+  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
     val start = Instant.now()
     try
       logger.info(s"${job.id}: running")
@@ -245,7 +240,7 @@ object JobPull:
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
-        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeInfo.nodeId, minio.server.user, nodeInfo.hostname, elapsed, job.submitted.resource, msg)
+        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeInfo, elapsed, job.submitted.resource, msg)
         MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
     finally
       ComputingResource.dispose(job.allocated)

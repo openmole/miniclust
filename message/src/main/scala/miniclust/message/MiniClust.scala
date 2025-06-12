@@ -100,4 +100,13 @@ object MiniClust:
       val path = s"${Coordination.accountingDirectory}/${ulid.toLowerCase}"
       Minio.upload(minio, coordinationBucket, content, path)
 
-  case class JobResourceUsage(bucket: String, identifier: String, key: String, second: Long, resource: Seq[Message.Resource], finalState: Message)
+    def parse(j: String): JobResourceUsage = parser.parse(j).toTry.get.as[JobResourceUsage].toTry.get
+
+  case class JobResourceUsage(
+    bucket: String,
+    identifier: String,
+    key: String,
+    hostname: Option[String],
+    second: Long,
+    resource: Seq[Message.Resource],
+    finalState: Message)

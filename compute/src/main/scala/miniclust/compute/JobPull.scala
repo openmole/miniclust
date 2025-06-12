@@ -60,6 +60,10 @@ object JobPull:
     usageHistory: UsageHistory,
     bucketIgnoreList: BucketIgnoreList)
 
+  case class NodeInfo(
+    nodeId: String,
+    hostname: Option[String])
+
   extension (v: SelectedJob)
     def id =
       v match
@@ -225,23 +229,15 @@ object JobPull:
 
       case NotSelected.JobRemoved => pull(minio, coordinationBucket, state, random)
       case NotSelected.NotFound | NotSelected.NotEnoughResource => None
-//        Thread.sleep(config.random.nextInt(10000))
-//        pull(minio, coordinationBucket, pool, accounting)
 
-
-//  def pullJob(minio: Minio, coordinationBucket: Minio.Bucket, pool: ComputingResource, accounting: UsageHistory, nodeId: String)(using JobPull.JobPullConfig, Compute.ComputeConfig, FileCache) =
-//    val job = JobPull.pull(minio, coordinationBucket, pool, accounting)
-//    val heartBeat = JobPull.startHeartBeat(minio, coordinationBucket, job)
-//
-//    Background.run:
-//      executeJob(minio, coordinationBucket, job, accounting, nodeId, heartBeat)
-
-  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeId: String, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
+  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: NodeInfo, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
     val start = Instant.now()
     try
       logger.info(s"${job.id}: running")
       val msg = Compute.run(minio, coordinationBucket, job)
       logger.info(s"${job.id}: job finished ${msg}")
+
+      val elapsed = UsageHistory.elapsedSeconds(start)
 
       Background.run:
         Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
@@ -249,7 +245,7 @@ object JobPull:
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
-        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeId, minio.server.user, UsageHistory.elapsedSeconds(start), job.submitted.resource, msg)
+        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeInfo.nodeId, minio.server.user, nodeInfo.hostname, elapsed, job.submitted.resource, msg)
         MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
     finally
       ComputingResource.dispose(job.allocated)

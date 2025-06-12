@@ -62,6 +62,8 @@ def loadConfiguration(configurationFile: File) =
 
   val random = util.Random(seed)
 
+  val nodeInfo = JobPull.NodeInfo(activity.identifier, Option(System.getenv("HOSTNAME")))
+
   (
     configuration = configuration,
     cores = cores,
@@ -72,7 +74,8 @@ def loadConfiguration(configurationFile: File) =
     minio = minio,
     coordinationBucket = coordinationBucket,
     random = random,
-    seed = seed
+    seed = seed,
+    nodeInfo = nodeInfo
   )
 
 
@@ -105,7 +108,7 @@ def loadConfiguration(configurationFile: File) =
 
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pullState.computingResource, c.random)
 
-      val maxPullers = math.min(10, c.cores / 5)
+      val maxPullers = math.max(10, c.cores / 5)
       val pullers = Tool.Counter(1, 10)
 
       def runPuller(): Unit =
@@ -130,7 +133,7 @@ def loadConfiguration(configurationFile: File) =
                   val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job)
 
                   Background.run:
-                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.activity.identifier, heartBeat)
+                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat)
 
                   if pullers.tryIncrement()
                   then runPuller()

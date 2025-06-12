@@ -29,11 +29,10 @@ object Service:
   val logger = Logger.getLogger(getClass.getName)
 
   def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, resource: ComputingResource, random: Random) =
-    val old = 7 * 60 * 60 * 24
     val removeRandom = Random(random.nextLong)
     val s1 =
       Cron.seconds(5 * 60): () =>
-        removeOldData(minio, coordinationBucket, old, removeRandom)
+        removeOldData(minio, coordinationBucket, removeRandom)
     val s2 =
       Cron.seconds(60): () =>
         FileCache.clean(fileCache)
@@ -47,18 +46,24 @@ object Service:
 
     StopTask.combine(s1, s2, s3, s4)
 
-  def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, old: Int, random: Random) =
+  def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val date = Minio.date(minio)
-    def tooOld(d: Long) = (date - d) > old
+    def tooOld(d: Long, old: Long) = (date - d) > old
+
+    def oldActivity =
+      Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.workerActivity).filter(f => tooOld(f.lastModified.get, 5 * 60))
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
+      val old = 7 * 60 * 60 * 24
       logger.info(s"Removing old data of bucket ${b}")
-      def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
-      def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
-      def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get))
+      def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
+      def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
+      def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
 
       for
-        f <- (oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)
+        f <- (oldActivity ++ oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)
       do
         Minio.delete(minio, b, f*)
+
+
 

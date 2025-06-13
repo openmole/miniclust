@@ -45,7 +45,8 @@ object Service:
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
     val s5 =
       Cron.seconds(60 * 60): () =>
-        removeOldActivity(minio, coordinationBucket)
+        if random.nextDouble() < 0.1
+        then removeOldActivity(minio, coordinationBucket)
 
 
     StopTask.combine(s1, s2, s3, s4, s5)

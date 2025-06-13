@@ -43,15 +43,28 @@ object Service:
       Cron.seconds(60): () =>
         val currentActivity = activity.copy(used = activity.cores - ComputingResource.freeCore(resource))
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
+    val s5 =
+      Cron.seconds(60 * 60): () =>
+        removeOldActivity(minio, coordinationBucket)
 
-    StopTask.combine(s1, s2, s3, s4)
 
-  def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
+    StopTask.combine(s1, s2, s3, s4, s5)
+
+
+  def removeOldActivity(minio: Minio, coordinationBucket: Minio.Bucket) =
     val date = Minio.date(minio)
     def tooOld(d: Long, old: Long) = (date - d) > old
 
     def oldActivity =
       Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.workerActivity).filter(f => tooOld(f.lastModified.get, 5 * 60))
+
+    for f <- oldActivity.map(_.name).sliding(100, 100)
+    do Minio.delete(minio, coordinationBucket, f *)
+
+  def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
+    val date = Minio.date(minio)
+    def tooOld(d: Long, old: Long) = (date - d) > old
+
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
       val old = 7 * 60 * 60 * 24
@@ -61,7 +74,7 @@ object Service:
       def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
 
       for
-        f <- (oldActivity ++ oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)
+        f <- (oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)
       do
         Minio.delete(minio, b, f*)
 

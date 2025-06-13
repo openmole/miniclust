@@ -48,7 +48,7 @@ def loadConfiguration(configurationFile: File) =
 
   val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
 
-  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")))
+  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank))
   val activity = MiniClust.WorkerActivity(cores, nodeInfo)
 
   val baseDirectory = File(configuration.compute.workDirectory)

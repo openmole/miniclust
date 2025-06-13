@@ -55,7 +55,12 @@ object Tool:
     s"blake3:${hash.map("%02x".format(_)).mkString}"
 
   def jsonConfiguration =
-    derivation.Configuration.default.withDiscriminator("type").withDefaults.withKebabCaseMemberNames.withKebabCaseConstructorNames
+    derivation.Configuration.default.
+      withDiscriminator("type").
+      withDefaults.
+      withoutStrictDecoding.
+      with.
+      withKebabCaseMemberNames.withKebabCaseConstructorNames
 
   def queryExternalIP: Option[String] =
     val client =

@@ -47,8 +47,7 @@ object Service:
       Cron.seconds(60 * 60): () =>
         if random.nextDouble() < 0.1
         then removeOldActivity(minio, coordinationBucket)
-
-
+    
     StopTask.combine(s1, s2, s3, s4, s5)
 
 

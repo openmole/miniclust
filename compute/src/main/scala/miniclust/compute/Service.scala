@@ -31,7 +31,7 @@ object Service:
   def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, resource: ComputingResource, random: Random) =
     val removeRandom = Random(random.nextLong)
     val s1 =
-      Cron.seconds(5 * 60): () =>
+      Cron.seconds(60 * 60): () =>
         removeOldData(minio, coordinationBucket, removeRandom)
     val s2 =
       Cron.seconds(60): () =>
@@ -60,7 +60,7 @@ object Service:
       Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.workerActivity).filter(f => tooOld(f.lastModified.get, 5 * 60))
 
     for f <- oldActivity.map(_.name).sliding(100, 100)
-    do Minio.delete(minio, coordinationBucket, f *)
+    do Minio.delete(minio, coordinationBucket, f*)
 
   def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val date = Minio.date(minio)

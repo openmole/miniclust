@@ -114,11 +114,8 @@ object JobPull:
       Minio.listObjects(minio, bucket, prefix = prefix, recursive = true).map: i =>
         i.name.drop(prefix.length)
 
-    val buckets = Minio.listUserBuckets(minio)
-
     val (empty, notEmpty) =
-      buckets.
-        filter(b => state.bucketIgnoreList.shouldBeChecked(b.name)).
+      Minio.listUserBuckets(minio, b => !state.bucketIgnoreList.shouldBeChecked(b.name)).
         map(b => b -> userJobs(b)).
         partition(_._2.isEmpty)
 

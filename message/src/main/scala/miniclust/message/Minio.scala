@@ -115,16 +115,16 @@ object Minio:
 
       bucket(minio, login, false)
 
-  def listUserBuckets(minio: Minio): Seq[Bucket] =
+  def listUserBuckets(minio: Minio, ignore: Bucket => Boolean = _ => false): Seq[Bucket] =
     withClient(minio): c =>
-      c.listBuckets().buckets().asScala.flatMap: bucket =>
+      c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).flatMap: bucket =>
         Try:
           c.getBucketTagging(
-            GetBucketTaggingRequest.builder().bucket(bucket.name()).build()
+            GetBucketTaggingRequest.builder().bucket(bucket.name).build()
           )
         .toOption.flatMap: t =>
           if t.tagSet().asScala.map(t => t.key() -> t.value()).toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
-          then Some(Bucket(bucket.name()))
+          then Some(bucket)
           else None
       .toSeq
 

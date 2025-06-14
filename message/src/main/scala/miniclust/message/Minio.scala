@@ -117,7 +117,7 @@ object Minio:
 
   def listUserBuckets(minio: Minio, ignore: Bucket => Boolean = _ => false): Seq[Bucket] =
     withClient(minio): c =>
-      c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).flatMap: bucket =>
+      c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).filterNot(ignore).flatMap: bucket =>
         Try:
           c.getBucketTagging(
             GetBucketTaggingRequest.builder().bucket(bucket.name).build()

@@ -232,10 +232,9 @@ object JobPull:
       logger.info(s"${job.id}: job finished ${msg}")
 
       val elapsed = UsageHistory.elapsedSeconds(start)
+      Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
       Background.run:
-        Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
-
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 

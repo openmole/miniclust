@@ -59,7 +59,6 @@ object Tool:
       withDiscriminator("type").
       withDefaults.
       withoutStrictDecoding.
-      with.
       withKebabCaseMemberNames.withKebabCaseConstructorNames
 
   def queryExternalIP: Option[String] =

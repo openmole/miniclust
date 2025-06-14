@@ -26,7 +26,7 @@ lazy val compute = project
     libraryDependencies += "com.github.pathikrit" %% "better-files" % "3.9.2",
     libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.0",
     libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
-    libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.0",
+    libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.1",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .dependsOn(message)
@@ -36,8 +36,8 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
-    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.31.62",
-    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.31.62",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.31.63",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.31.63",
     libraryDependencies += "commons-codec" % "commons-codec" % "1.18.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,

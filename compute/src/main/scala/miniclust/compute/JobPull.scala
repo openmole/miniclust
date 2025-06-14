@@ -185,7 +185,6 @@ object JobPull:
 
           logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
 
-
   @tailrec def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): Option[SubmittedJob] =
     val job = selectJob(minio, coordinationBucket, state, random)
 

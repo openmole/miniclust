@@ -158,3 +158,56 @@ Hello MiniClust
 ## JSON Schema
 
 To implement a client for your language of choice, you can get the complete [JSON Schema of the MiniClust messages](Schema.md).
+
+## More Complex Job
+
+Here is a job with caching of a file, archive extraction, output file and resource request:
+```json
+{
+  "version" : "1",
+  "account" : {
+    "bucket" : "login"
+  },
+  "command" : "cd extracted && ./run -i ../cache.txt -o ../result.bin",
+  "input-file" : [
+    {
+      "remote" : "cache.txt",
+      "local" : "cache.txt",
+      "cache-key" : {
+        "hash" : "blake3:b3sum_of_cache.txt",
+        "extraction" : null
+      }
+    },
+    {
+      "remote" : "archive.tgz",
+      "local" : "extracted",
+      "cache-key" : {
+        "hash" : "blake3:b3sum_of_archive.tgz",
+        "extraction" : {
+          "type" : "tar-gz"
+        }
+      }
+    }
+  ],
+  "output-file" : [
+    {
+      "local" : "result.bin",
+      "remote" : "result"
+    }
+  ],
+  "std-out" : "output.txt",
+  "std-err" : null,
+  "resource" : [
+    {
+      "core" : 4,
+      "type" : "core"
+    },
+    {
+      "second" : 7200,
+      "type" : "max-time"
+    }
+  ],
+  "noise" : null,
+  "type" : "submitted"
+}
+```

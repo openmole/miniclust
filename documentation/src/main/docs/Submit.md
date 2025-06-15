@@ -157,3 +157,32 @@ Hello MiniClust
 ## JSON Schema
 
 To implement a client for your language of choice, you can get the complete [JSON Schema of the MiniClust messages](Schema.md).
+
+## More Complex Job
+
+Here is a job with caching of a file, archive extraction, output file and resource request:
+```scala mdoc:passthrough
+import miniclust.message.*
+val msg2 =
+  MiniClust.generateMessage(
+    Message.Submitted(
+      "login",
+      """cd extracted && ./run -i ../cache.txt -o ../result.bin""",
+      inputFile =  
+        Seq(
+          InputFile("cache.txt", "cache.txt", Some("blake3:b3sum_of_cache.txt")), 
+          InputFile("archive.tgz", "extracted", Some(InputFile.Cache("blake3:b3sum_of_archive.tgz", extraction = Some(InputFile.Extraction.TarGZ))))
+        ),
+      outputFile = Seq(OutputFile("result.bin", "result")),
+      resource = Seq(Resource.Core(4), Resource.MaxTime(7200)),
+      stdOut = Some("output.txt"),
+    ),
+    pretty = true
+  )
+
+println(
+  s"""```json
+     |$msg2
+     |```""".stripMargin
+)
+```

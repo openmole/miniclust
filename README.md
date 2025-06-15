@@ -1,7 +1,7 @@
 # MiniClust
 
 MiniClust is a lightweight multiuser batch computing system, composed of workers coordinated via a central vanilla minio server. It allows
-distribution bash commands on a set of machines.
+destribution of bash command execution on a potentially large set of machines.
 
 One or several workers pull jobs described in JSON files from the Minio server, and coordinate by writing files on the server.
 

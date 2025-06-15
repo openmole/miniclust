@@ -114,9 +114,7 @@ object JobPull:
       Minio.listObjects(minio, bucket, prefix = prefix, recursive = true).map: i =>
         i.name.drop(prefix.length)
 
-    def ignore(b: Bucket) =
-      b.name == MiniClust.Coordination.bucketName ||
-        !state.bucketIgnoreList.shouldBeChecked(b.name)
+    def ignore(b: Bucket) = !state.bucketIgnoreList.shouldBeChecked(b.name)
 
     val (empty, notEmpty) =
       Minio.listUserBuckets(minio, ignore).

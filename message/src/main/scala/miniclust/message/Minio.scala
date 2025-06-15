@@ -116,8 +116,11 @@ object Minio:
       bucket(minio, login, false)
 
   def listUserBuckets(minio: Minio, ignore: Bucket => Boolean = _ => false): Seq[Bucket] =
+    def ignoreValue(b: Bucket) =
+      b.name == MiniClust.Coordination.bucketName || ignore(b)
+
     withClient(minio): c =>
-      c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).filterNot(ignore).flatMap: bucket =>
+      c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).filterNot(ignoreValue).flatMap: bucket =>
         Try:
           c.getBucketTagging(
             GetBucketTaggingRequest.builder().bucket(bucket.name).build()

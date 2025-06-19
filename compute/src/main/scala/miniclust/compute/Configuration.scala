@@ -43,6 +43,10 @@ object Configuration:
     sudo: Option[String],
     cores: Option[Int]) derives derivation.ConfiguredCodec
 
+  case class Worker(
+    storage: Option[String] = None)
+
 case class Configuration(
   minio: Configuration.Minio,
-  compute: Configuration.Compute) derives derivation.ConfiguredCodec
+  compute: Configuration.Compute,
+  worker: Configuration.Worker = Configuration.Worker()) derives derivation.ConfiguredCodec

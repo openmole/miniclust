@@ -14,6 +14,7 @@ import java.util.concurrent.{Executors, Semaphore}
 import java.util.logging.*
 import scala.util.Random
 import scala.util.hashing.MurmurHash3
+import scala.jdk.CollectionConverters.*
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -48,7 +49,30 @@ def loadConfiguration(configurationFile: File) =
 
   val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
 
-  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank))
+  val storage =
+    configuration.worker.storage match
+      case Some(s) => Some(File(s))
+      case None =>
+        if configurationFile.parent.isWritable
+        then Some(configurationFile.parent / ".miniclust")
+        else None
+
+  storage.foreach(_.createDirectories())
+
+  val id =
+    storage match
+      case Some(s) =>
+        val idFile = s / "worker-id"
+
+        if !idFile.exists || idFile.contentAsString.isBlank
+        then
+          val id = UUID.randomUUID().toString
+          idFile.writeText(id)
+
+        idFile.contentAsString.takeWhile(_ != '\n')
+      case None =>  UUID.randomUUID().toString
+
+  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id)
   val activity = MiniClust.WorkerActivity(cores, nodeInfo)
 
   val baseDirectory = File(configuration.compute.workDirectory)
@@ -151,7 +175,7 @@ def loadConfiguration(configurationFile: File) =
       end runPuller
 
       runPuller()
-      Node.logger.info(s"Worker is running, pulling jobs, resources: ${c.cores} cores")
+      Node.logger.info(s"Worker (${c.nodeInfo.id}) is running, pulling jobs, resources: ${c.cores} cores")
 
       val finished = Semaphore(0)
       scala.sys.addShutdownHook:

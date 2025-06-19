@@ -91,10 +91,10 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[NodeInfo] = derivation.ConfiguredCodec.derived
 
-    def apply(key: String, hostname: Option[String]) =
+    def apply(key: String, hostname: Option[String], id: String) =
       new NodeInfo(
         ip = Tool.queryExternalIP.getOrElse("NA"),
-        id = UUID.randomUUID().toString,
+        id = id,
         key = key,
         hostname = hostname
       )

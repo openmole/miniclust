@@ -41,7 +41,7 @@ object Service:
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>
-        val currentActivity = activity.copy(used = activity.cores - ComputingResource.freeCore(resource))
+        val currentActivity = activity.copy(usage = activity.usage.copy(used = activity.usage.cores - ComputingResource.freeCore(resource)))
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
     val s5 =
       Cron.seconds(60 * 60): () =>

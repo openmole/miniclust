@@ -127,7 +127,9 @@ def loadConfiguration(configurationFile: File) =
         cores = c.cores,
         history = 48,
         ignoreAfter = 3600,
-        checkAfter = 60
+        checkAfter = 60,
+        maxCPU = c.configuration.compute.maxCPULoad,
+        maxMemory = c.configuration.compute.maxMemory
       )
 
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pullState.computingResource, c.random)

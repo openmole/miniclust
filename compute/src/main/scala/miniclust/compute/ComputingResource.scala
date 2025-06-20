@@ -1,6 +1,9 @@
 package miniclust.compute
 
+import miniclust.compute.Compute.getClass
+
 import java.time.Instant
+import java.util.logging.Logger
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -21,7 +24,9 @@ import java.time.Instant
 
 object ComputingResource:
 
-  def apply(core: Int) = new ComputingResource(core)
+  val logger = Logger.getLogger(getClass.getName)
+
+  def apply(core: Int, maxCPU: Option[Int], maxMemory: Option[Int]) = new ComputingResource(core, 3600, maxCPU, maxMemory)
 
   case class Allocated(pool: ComputingResource, core: Int, deadLine: Long)
 
@@ -31,15 +36,49 @@ object ComputingResource:
 
   def request(pool: ComputingResource, core: Int, time: Option[Int]) =
     pool.synchronized:
-      if pool.core >= core
+      val usage = machineUsage
+
+      val overloaded =
+        val cpuOverloaded = pool.maxCPULoad.map(usage.cpu > _).getOrElse(false)
+        val memOverloaded = pool.maxMemory.map(usage.mem > _).getOrElse(false)
+        cpuOverloaded || memOverloaded
+
+      if overloaded
       then
-        pool.core -= core
-        Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime)))
-      else None
+        logger.info(s"Machine overloaded: cpu ${usage.cpu}, mem ${usage.mem} (limits ${pool.maxCPULoad}, ${pool.maxMemory})")
+        None
+      else
+        if pool.core >= core
+        then
+          pool.core -= core
+          Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime)))
+        else None
 
   def freeCore(pool: ComputingResource) =
     pool.synchronized:
       pool.core
 
-case class ComputingResource(private var core: Int, defaultTime: Int = 3600)
+  def machineUsage =
+    val script =
+      """
+        |cores=$(nproc)
+        |load_avg=$(cut -d ' ' -f1 /proc/loadavg | awk '{printf "%d\n", $1 * 100}')
+        |cpu_avg_pct=$(awk -v loadval="$load_avg" -v cores="$cores" 'BEGIN { printf "%d", loadval / cores }')
+        |
+        |mem_total=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+        |mem_available=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+        |mem_used=$(expr "$mem_total" - "$mem_available")
+        |mem_usage=$(expr "$mem_used" \* 100 / "$mem_total")
+        |
+        |echo "$cpu_avg_pct,$mem_usage"
+        |""".stripMargin.split('\n').filter(!_.trim.isEmpty).mkString(" && ")
+
+    import scala.sys.process.*
+    val output = Seq("bash", "-c", script).!!.trim
+    val res = output.split(",")
+
+    (cpu = res(0).toInt, mem = res(1).toInt)
+
+
+case class ComputingResource(private var core: Int, defaultTime: Int, maxCPULoad: Option[Int], maxMemory: Option[Int])
 

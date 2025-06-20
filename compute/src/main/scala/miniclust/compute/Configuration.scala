@@ -41,7 +41,9 @@ object Configuration:
     cache: Int,
     user: Option[String],
     sudo: Option[String],
-    cores: Option[Int]) derives derivation.ConfiguredCodec
+    cores: Option[Int],
+    maxCPULoad: Option[Int] = Some(110),
+    maxMemory: Option[Int] = Some(95)) derives derivation.ConfiguredCodec
 
   case class Worker(
     storage: Option[String] = None)

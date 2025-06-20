@@ -70,7 +70,7 @@ object MiniClust:
     given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived
 
     def apply(cores: Int, nodeInfo: NodeInfo) =
-      new WorkerActivity(cores, 0, nodeInfo, WorkerActivity.MiniClust())
+      new WorkerActivity(nodeInfo,  Usage(cores, 0), MiniClust())
 
     def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
       val content = activity.asJson.noSpaces
@@ -80,10 +80,13 @@ object MiniClust:
       version: String = miniclust.BuildInfo.version,
       build: Long = miniclust.BuildInfo.buildTime) derives derivation.ConfiguredCodec
 
+    case class Usage(
+      cores: Int,
+      used: Int) derives derivation.ConfiguredCodec
+
   case class WorkerActivity(
-    cores: Int,
-    used: Int,
     nodeInfo: NodeInfo,
+    usage: WorkerActivity.Usage,
     miniclust: WorkerActivity.MiniClust)
 
 

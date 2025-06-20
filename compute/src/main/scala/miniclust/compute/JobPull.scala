@@ -42,6 +42,8 @@ object JobPull:
   def state(
     minio: Minio,
     cores: Int,
+    maxCPU: Option[Int],
+    maxMemory: Option[Int],
     history: Int,
     ignoreAfter: Int,
     checkAfter: Int) =
@@ -49,7 +51,7 @@ object JobPull:
     val ignoreList = BucketIgnoreList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
 
     State(
-      ComputingResource(cores),
+      ComputingResource(cores, maxCPU = maxCPU, maxMemory = maxMemory),
       UsageHistory(history),
       ignoreList
     )

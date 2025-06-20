@@ -62,9 +62,8 @@ object ComputingResource:
     val script =
       """
         |cores=$(nproc)
-        |load_avg=$(cut -d ' ' -f1 /proc/loadavg | awk '{printf "%d\n", $1 * 100}')
-        |cpu_avg_pct=$(awk -v loadval="$load_avg" -v cores="$cores" 'BEGIN { printf "%d", loadval / cores }')
-        |
+        |load_avg=$(cut -d ' ' -f1 /proc/loadavg)
+        |cpu_avg_pct=$(awk -v load="$load_avg" -v cores="$cores" 'BEGIN { printf("%.2f", (load / cores) * 100) }')
         |mem_total=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
         |mem_available=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
         |mem_used=$(expr "$mem_total" - "$mem_available")
@@ -77,7 +76,7 @@ object ComputingResource:
     val output = Seq("bash", "-c", script).!!.trim
     val res = output.split(",")
 
-    (cpu = res(0).toInt, mem = res(1).toInt)
+    (cpu = res(0).toDouble, mem = res(1).toInt)
 
 
 case class ComputingResource(private var core: Int, defaultTime: Int, maxCPULoad: Option[Int], maxMemory: Option[Int])

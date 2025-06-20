@@ -200,8 +200,8 @@ object Compute:
               do
                 if Instant.now().getEpochSecond > job.allocated.deadLine
                 then
-                  def message = s"Max requested time for the job has been exhausted"
                   process.dispose()
+                  def message = s"Max requested time for the job has been exhausted"
                   uploadOutputError(Some(s"${job.id}: $message"))
                   boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 

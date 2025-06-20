@@ -201,6 +201,7 @@ object Compute:
                 if Instant.now().getEpochSecond > job.allocated.deadLine
                 then
                   def message = s"Max requested time for the job has been exhausted"
+                  process.dispose()
                   uploadOutputError(Some(s"${job.id}: $message"))
                   boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 
@@ -258,32 +259,50 @@ object ProcessUtil:
       val killCommand =
         val killAll =
           """
-             |kill_tree() {
-             |  local pid="$1"
-             |  if ! ps -p "$pid" > /dev/null; then
-             |    return
-             |  fi
-             |  for child in $(pgrep -P "$pid"); do
-             |    kill_tree "$child"
-             |  done
-             |  kill -SIGTERM "$pid"
-             |  local timeout=30
-             |  local elapsed=0
-             |  while ps -p "$pid" > /dev/null; do
-             |    if [ "$elapsed" -ge "$timeout" ]; then
-             |      kill -SIGKILL "$pid"
-             |      break
-             |    fi
-             |    sleep 1
-             |    ((elapsed++))
-             |  done
-             |}
-             |
-             |kill_tree "$1"
-             |"""".stripMargin
+            |kill_tree() {
+            |  local pid="$1"
+            |  local timeout=30
+            |  local elapsed=0
+            |
+            |  local children
+            |  children=$(ps -eo pid=,ppid= | awk -v p="$pid" "
+            |    {
+            |      pid[\$1] = \$2
+            |    }
+            |    END {
+            |      for (i in pid) {
+            |        ppid = pid[i]
+            |        while (ppid && ppid != p) {
+            |          ppid = pid[ppid]
+            |        }
+            |        if (ppid == p) {
+            |          print i
+            |        }
+            |      }
+            |    }")
+            |
+            |  for child in $children; do
+            |    kill -TERM "$child" 2>/dev/null
+            |  done
+            |
+            |  kill -TERM "$pid" 2>/dev/null
+            |
+            |  while ps -p "$pid" > /dev/null; do
+            |    if [ "$elapsed" -ge "$timeout" ]; then
+            |      kill -KILL "$pid" 2>/dev/null
+            |      break
+            |    fi
+            |    sleep 1
+            |    ((elapsed++))
+            |  done
+            |}
+            |
+            |kill_tree "$1"
+            |""".stripMargin
+
         user match
-          case Some(user) => s"sudo -u $user bash -c '$killAll' -- ${process.pid()}"
-          case None => s"bash -c '$killAll' -- ${process.pid()}"
+          case Some(user) => s"sudo -u $user bash -c '$killAll' bash ${process.pid()}"
+          case None => s"bash -c '$killAll' bash ${process.pid()}"
 
       import scala.sys.process.*
       logger.info(s"Killing process ${process.pid()}")

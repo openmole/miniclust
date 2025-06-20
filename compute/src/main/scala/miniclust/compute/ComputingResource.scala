@@ -71,7 +71,7 @@ object ComputingResource:
         |mem_usage=$(expr "$mem_used" \* 100 / "$mem_total")
         |
         |echo "$cpu_avg_pct,$mem_usage"
-        |""".stripMargin.split('\n').filter(!_.trim.isEmpty).mkString(" && ")
+        |""".stripMargin.split('\n').filter(_.trim.nonEmpty).mkString(" && ")
 
     import scala.sys.process.*
     val output = Seq("bash", "-c", script).!!.trim

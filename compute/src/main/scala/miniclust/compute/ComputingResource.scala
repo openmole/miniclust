@@ -28,7 +28,7 @@ object ComputingResource:
 
   def apply(core: Int, maxCPU: Option[Int], maxMemory: Option[Int]) = new ComputingResource(core, 3600, maxCPU, maxMemory)
 
-  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long)
+  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long, time: Long)
 
   def dispose(a: Allocated): Unit =
     a.pool.synchronized:
@@ -51,7 +51,7 @@ object ComputingResource:
         if pool.core >= core
         then
           pool.core -= core
-          Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime)))
+          Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime), time.getOrElse(pool.defaultTime)))
         else None
 
   def freeCore(pool: ComputingResource) =

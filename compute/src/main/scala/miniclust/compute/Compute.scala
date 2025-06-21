@@ -201,7 +201,7 @@ object Compute:
                 if Instant.now().getEpochSecond > job.allocated.deadLine
                 then
                   process.dispose()
-                  def message = s"Max requested time for the job has been exhausted"
+                  def message = s"Max requested CPU time for the job has been exhausted"
                   uploadOutputError(Some(s"${job.id}: $message"))
                   boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
 
@@ -255,6 +255,7 @@ object ProcessUtil:
 
   class MyProcess(process: Process, user: Option[String]):
     def isAlive: Boolean = process.isAlive
+    def pid: Long = process.pid()
     def dispose(): Unit =
       val killCommand =
         val killAll =

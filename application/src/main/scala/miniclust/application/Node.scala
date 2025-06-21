@@ -72,9 +72,9 @@ def loadConfiguration(configurationFile: File) =
         idFile.contentAsString.takeWhile(_ != '\n')
       case None =>  UUID.randomUUID().toString
 
-  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id)
-  val activity = MiniClust.WorkerActivity(cores, nodeInfo)
-
+  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id, cores)
+  val miniclustInfo = MiniClust.WorkerActivity.MiniClust()
+  
   val baseDirectory = File(configuration.compute.workDirectory)
   baseDirectory.createDirectories()
 
@@ -91,7 +91,7 @@ def loadConfiguration(configurationFile: File) =
   (
     configuration = configuration,
     cores = cores,
-    activity = activity,
+    miniclustInfo = miniclustInfo,
     baseDirectory = baseDirectory,
     fileCache = fileCache,
     server = server,
@@ -132,7 +132,7 @@ def loadConfiguration(configurationFile: File) =
         maxMemory = c.configuration.compute.maxMemory
       )
 
-      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.activity, pullState.computingResource, c.random)
+      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.nodeInfo, c.miniclustInfo, pullState.computingResource, c.random)
 
       val maxPullers = math.max(10, c.cores / 5)
       val pullers = Tool.Counter(1, 10)

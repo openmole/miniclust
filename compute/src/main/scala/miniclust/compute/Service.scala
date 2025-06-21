@@ -19,7 +19,7 @@ package miniclust.compute
 
 import miniclust.compute.Cron.StopTask
 import miniclust.message.*
-import miniclust.message.MiniClust.WorkerActivity
+import miniclust.message.MiniClust.{NodeInfo, WorkerActivity}
 
 import java.util.logging.Logger
 import scala.util.Random
@@ -28,7 +28,7 @@ object Service:
 
   val logger = Logger.getLogger(getClass.getName)
 
-  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, activity: WorkerActivity, resource: ComputingResource, random: Random) =
+  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, nodeInfo: NodeInfo, miniclust: WorkerActivity.MiniClust, resource: ComputingResource, random: Random) =
     val removeRandom = Random(random.nextLong)
     val s1 =
       Cron.seconds(60 * 60): () =>
@@ -41,7 +41,8 @@ object Service:
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>
-        val currentActivity = activity.copy(usage = activity.usage.copy(used = activity.usage.cores - ComputingResource.freeCore(resource)))
+        val usage = WorkerActivity.Usage(nodeInfo.cores - ComputingResource.freeCore(resource))
+        val currentActivity = WorkerActivity(nodeInfo, miniclust, usage)
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
     val s5 =
       Cron.seconds(60 * 60): () =>
@@ -56,7 +57,7 @@ object Service:
     def tooOld(d: Long, old: Long) = (date - d) > old
 
     def oldActivity =
-      Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.workerActivity).filter(f => tooOld(f.lastModified.get, 5 * 60))
+      Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.activeWorker).filter(f => tooOld(f.lastModified.get, 5 * 60))
 
     for f <- oldActivity.map(_.name).sliding(100, 100)
     do Minio.delete(minio, coordinationBucket, f*)

@@ -236,6 +236,8 @@ object JobPull:
       Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
       Background.run:
+        accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
+
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
@@ -244,5 +246,4 @@ object JobPull:
     finally
       ComputingResource.dispose(job.allocated)
       heartBeat.stop()
-      accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
       JobPull.clearCheckIn(minio, coordinationBucket, job)

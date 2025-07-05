@@ -153,7 +153,7 @@ object Compute:
   def run(
     minio: Minio,
     coordinationBucket: Minio.Bucket,
-    job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache) =
+    job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache): Message.FinalState =
     createDirectories(job.id)
 
     try
@@ -327,3 +327,75 @@ object ProcessUtil:
 
     val p = builder.start()
     MyProcess(p, user)
+
+  // In KB
+  def memory(pid: Long) =
+    import scala.sys.process.*
+    import scala.util.*
+
+    val script =
+      s"""
+         |#!/bin/bash
+         |
+         |get_descendants() {
+         |    local pid=$$1
+         |    local children=$$(ps --no-headers -o pid --ppid "$$pid")
+         |    for child in $$children; do
+         |        echo $$child
+         |        get_descendants $$child
+         |    done
+         |}
+         |
+         |PID=$pid
+         |
+         |# Start with the main process
+         |ALL_PIDS=($$PID)
+         |
+         |# Add all descendants
+         |while read -r child; do
+         |    ALL_PIDS+=($$child)
+         |done < <(get_descendants $$PID)
+         |
+         |# Sum RSS for all PIDs
+         |ps -o rss= -p $$(IFS=,; echo "$${ALL_PIDS[*]}") | awk '{sum+=$$1} END {print sum}'
+         |""".stripMargin
+
+    Try:
+      val res = Seq("bash", "-c", script).!!.trim
+      res.toLong
+
+
+  // In seconds
+  def cpuTime(pid: Long) =
+    import scala.sys.process.*
+    import scala.util.*
+
+    val script =
+      s"""
+         |ps -eo pid,ppid,cputime | awk -v target=${pid} '
+         |    BEGIN {
+         |        total_seconds = 0
+         |        processes[target] = 1
+         |    }
+         |    {
+         |        if ($$2 in processes) {
+         |            processes[$$1] = 1
+         |        }
+         |        if ($$1 in processes) {
+         |            # Parse cputime format (HH:MM:SS or MM:SS)
+         |            split($$3, time_parts, ":")
+         |            if (length(time_parts) == 3) {
+         |                seconds = time_parts[1]*3600 + time_parts[2]*60 + time_parts[3]
+         |            } else {
+         |                seconds = time_parts[1]*60 + time_parts[2]
+         |            }
+         |            total_seconds += seconds
+         |        }
+         |    }
+         |    END { print total_seconds }
+         |'
+         |""".stripMargin
+
+    Try:
+      val res = Seq("bash", "-c", script).!!
+      res.toDouble

@@ -48,7 +48,7 @@ object JobPull:
     ignoreAfter: Int,
     checkAfter: Int) =
     def buckets = listUserBuckets(minio)
-    val ignoreList = BucketIgnoreList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
+    val ignoreList = IdleBucketList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
 
     State(
       ComputingResource(cores, maxCPU = maxCPU, maxMemory = maxMemory),
@@ -59,7 +59,7 @@ object JobPull:
   case class State(
     computingResource: ComputingResource,
     usageHistory: UsageHistory,
-    bucketIgnoreList: BucketIgnoreList)
+    bucketIgnoreList: IdleBucketList)
 
   extension (v: SelectedJob)
     def id =

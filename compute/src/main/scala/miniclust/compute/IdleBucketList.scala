@@ -20,13 +20,13 @@ import java.time.Instant
  */
 
 
-object BucketIgnoreList:
+object IdleBucketList:
   def apply(ignoreAfter: Int, checkAfter: Int, initialBuckets: Seq[String]) =
-    val l = new BucketIgnoreList(ignoreAfter, checkAfter)
+    val l = new IdleBucketList(ignoreAfter, checkAfter)
     initialBuckets.foreach(l.initialize)
     l
 
-class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
+class IdleBucketList(idleAfter: Int, checkAfter: Int):
   private val firstCheck = collection.mutable.Map[String, Long]()
   private val lastCheck = collection.mutable.Map[String, Long]()
 
@@ -45,7 +45,7 @@ class BucketIgnoreList(ignoreAfter: Int, checkAfter: Int):
 
   def shouldBeChecked(bucket: String): Boolean = synchronized:
     val now = Instant.now().getEpochSecond
-    def emptySinceLong = firstCheck.get(bucket).map(t => (now - t) > ignoreAfter)
+    def emptySinceLong = firstCheck.get(bucket).map(t => (now - t) > idleAfter)
     def checkedRecently = lastCheck.get(bucket).map(t => (now - t) < checkAfter)
 
     (emptySinceLong zip checkedRecently).map: (e, c) =>

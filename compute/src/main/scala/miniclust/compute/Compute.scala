@@ -40,7 +40,7 @@ object Compute:
   object ComputeConfig:
     def apply(baseDirectory: File, cache: Int, sudo: Option[String] = None) =
       baseDirectory.createDirectories()
-      val jobDirectory = baseDirectory / "job"
+      val jobDirectory = baseDirectory / "jobs"
       jobDirectory.createDirectories()
       new ComputeConfig(baseDirectory, jobDirectory, sudo)
 

@@ -90,3 +90,8 @@ object Tool:
     val sw = StringWriter()
     e.printStackTrace(PrintWriter(sw))
     sw.toString
+
+  def diskUsage(file: File) =
+    val totalSpace = file.getTotalSpace
+    val usableSpace = file.getUsableSpace
+    (total = totalSpace, usable = usableSpace)

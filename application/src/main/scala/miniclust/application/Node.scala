@@ -72,7 +72,6 @@ def loadConfiguration(configurationFile: File) =
         idFile.contentAsString.takeWhile(_ != '\n')
       case None =>  UUID.randomUUID().toString
 
-  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id, cores)
   val miniclustInfo = MiniClust.WorkerActivity.MiniClust()
   
   val baseDirectory = File(configuration.compute.workDirectory)
@@ -81,6 +80,9 @@ def loadConfiguration(configurationFile: File) =
   val fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
 
   val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
+
+  val space = miniclust.message.Tool.diskUsage(baseDirectory.toJava).total
+  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id, cores, space)
 
   val minio = Minio(server)
   val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)

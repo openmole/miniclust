@@ -24,6 +24,8 @@ import miniclust.message.MiniClust.{NodeInfo, WorkerActivity}
 import java.util.logging.Logger
 import scala.util.Random
 
+import better.files.*
+
 object Service:
 
   val logger = Logger.getLogger(getClass.getName)
@@ -41,7 +43,10 @@ object Service:
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>
-        val usage = WorkerActivity.Usage(nodeInfo.cores - ComputingResource.freeCore(resource))
+        val usage = WorkerActivity.Usage(
+          cores = nodeInfo.cores - ComputingResource.freeCore(resource),
+          usableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable
+        )
         val currentActivity = WorkerActivity(nodeInfo, miniclust, usage)
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
     val s5 =

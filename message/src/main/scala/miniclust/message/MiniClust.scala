@@ -77,7 +77,7 @@ object MiniClust:
       version: String = miniclust.BuildInfo.version,
       build: Long = miniclust.BuildInfo.buildTime) derives derivation.ConfiguredCodec
 
-    case class Usage(cores: Int) derives derivation.ConfiguredCodec
+    case class Usage(cores: Int, usableSpace: Long) derives derivation.ConfiguredCodec
 
   case class WorkerActivity(
     nodeInfo: NodeInfo,
@@ -88,13 +88,14 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[NodeInfo] = derivation.ConfiguredCodec.derived
 
-    def apply(key: String, hostname: Option[String], id: String, cores: Int) =
+    def apply(key: String, hostname: Option[String], id: String, cores: Int, space: Long) =
       new NodeInfo(
         ip = Tool.queryExternalIP.getOrElse("NA"),
         id = id,
         key = key,
         hostname = hostname,
-        cores = cores
+        cores = cores,
+        space = space
       )
 
   case class NodeInfo(
@@ -102,7 +103,8 @@ object MiniClust:
     ip: String,
     key: String,
     hostname: Option[String],
-    cores: Int)
+    cores: Int,
+    space: Long)
 
 
   object JobResourceUsage:

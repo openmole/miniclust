@@ -41,6 +41,7 @@ services:
       - ./data:/data
     labels:
       - "traefik.enable=true"
+      - "autoheal=true"
 
       # Router for S3 API
       - "traefik.http.routers.minio-api.rule=Host(`babar.openmole.org`)"
@@ -56,6 +57,22 @@ services:
       - "traefik.http.routers.minio-console.tls.certresolver=myresolver"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  autoheal:
+    image: willfarrell/autoheal
+    restart: always
+    environment:
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 0
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   minio-data:

@@ -79,7 +79,6 @@ volumes:
   letsencrypt:
 ```
 
-
 Then you should define at least 2 policies: 
  - one for the worker nodes that should be able to write in all user submission buckets and in the coordination bucket (call miniclust by default)
  - one for the users that should be able to use or create if does not exist a buket tagged with the tag: miniclust:submit

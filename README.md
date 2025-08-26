@@ -24,6 +24,7 @@ You can check the following docs:
 - [Submitting jobs](Submit.md)
 - [Deploy a cluster](Deploy.md)
 - [Run a worker with Docker](https://github.com/openmole/miniclust-worker)
+- [FAQ](FAQ.md)
 
 ## Licences
 

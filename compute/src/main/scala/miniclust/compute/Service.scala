@@ -45,7 +45,9 @@ object Service:
       Cron.seconds(60): () =>
         val usage = WorkerActivity.Usage(
           cores = nodeInfo.cores - ComputingResource.freeCore(resource),
-          usableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable
+          availableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable,
+          availableMemory = Tool.availableMemory,
+          load = Tool.machineLoad
         )
         val currentActivity = WorkerActivity(nodeInfo, miniclust, usage)
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)

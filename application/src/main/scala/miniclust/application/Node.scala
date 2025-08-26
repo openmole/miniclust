@@ -82,7 +82,18 @@ def loadConfiguration(configurationFile: File) =
   val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
 
   val space = miniclust.message.Tool.diskUsage(baseDirectory.toJava).total
-  val nodeInfo = MiniClust.NodeInfo(configuration.minio.key, Option(System.getenv("HOSTNAME")).filterNot(_.isBlank), id, cores, space)
+  val memory = miniclust.message.Tool.totalMemory
+  val machineCores = miniclust.message.Tool.machineCores
+
+  val nodeInfo =
+    MiniClust.NodeInfo(
+      configuration.minio.key,
+      Option(System.getenv("HOSTNAME")).filterNot(_.isBlank),
+      id,
+      cores = cores,
+      machineCores = machineCores,
+      space = space,
+      memory = memory)
 
   val minio = Minio(server)
   val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)

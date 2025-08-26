@@ -95,3 +95,29 @@ object Tool:
     val totalSpace = file.getTotalSpace
     val usableSpace = file.getUsableSpace
     (total = totalSpace, usable = usableSpace)
+
+  def totalMemory =
+   val script  ="""awk '/MemTotal/ {print $2}' /proc/meminfo"""
+   import scala.sys.process.*
+   Seq("bash", "-c", script).!!.trim.toLong
+
+  def availableMemory =
+    val script = """awk '/MemAvailable/ {print $2}' /proc/meminfo"""
+    import scala.sys.process.*
+    Seq("bash", "-c", script).!!.trim.toLong
+
+  def machineCores =
+    val script = """nproc"""
+    import scala.sys.process.*
+    Seq("bash", "-c", script).!!.trim.toInt
+
+  def machineLoad =
+    val script =
+      """
+        |cores=$(nproc)
+        |load_avg=$(cut -d ' ' -f1 /proc/loadavg)
+        |cpu_avg_pct=$(awk -v load="$load_avg" -v cores="$cores" 'BEGIN { printf("%.2f", (load / cores) * 100) }')
+        |echo $cpu_avg_pct""".stripMargin
+
+    import scala.sys.process.*
+    Seq("bash", "-c", script).!!.trim.toDouble

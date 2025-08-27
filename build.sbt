@@ -1,13 +1,13 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.7.0"
+val scala3Version = "3.7.2"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"
 ThisBuild / scalacOptions := Seq("-Xmax-inlines:100")
 ThisBuild / scalaVersion := scala3Version
 
-def circeVersion = "0.14.12"
+def circeVersion = "0.14.14"
 
 
 lazy val submit = project

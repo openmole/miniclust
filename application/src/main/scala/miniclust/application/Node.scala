@@ -4,7 +4,8 @@ import better.files.File
 import gears.async.default.given
 import gears.async.*
 import miniclust.compute.*
-import miniclust.compute.JobPull.executeJob
+import miniclust.compute.JobPull.PulledJob.{Invalid, Pulled}
+import miniclust.compute.JobPull.{PulledJob, executeJob}
 import miniclust.message.{MiniClust, Minio}
 
 import java.time.Instant
@@ -79,7 +80,12 @@ def loadConfiguration(configurationFile: File) =
 
   val fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)
 
-  val server = Minio.Server(configuration.minio.url, configuration.minio.key, configuration.minio.secret, insecure = configuration.minio.insecure)
+  val server =
+    Minio.Server(
+      configuration.minio.url,
+      configuration.minio.key,
+      configuration.minio.secret,
+      insecure = configuration.minio.insecure)
 
   val space = miniclust.message.Tool.diskUsage(baseDirectory.toJava).total
   val memory = miniclust.message.Tool.totalMemory
@@ -133,6 +139,7 @@ def loadConfiguration(configurationFile: File) =
   OParser.parse(parser1, args, Args()) match
     case Some(config) =>
       val c = loadConfiguration(config.configurationFile.get)
+
       given FileCache = c.fileCache
 
       val pullState = JobPull.state(
@@ -145,10 +152,14 @@ def loadConfiguration(configurationFile: File) =
         maxMemory = c.configuration.compute.maxMemory
       )
 
+
+      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
+
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.nodeInfo, c.miniclustInfo, pullState.computingResource, c.random)
 
-      val maxPullers = math.max(10, c.cores / 5)
-      val pullers = Tool.Counter(1, 10)
+      val maxPullers = math.max(10, c.cores / 4)
+      val minPullers = 1
+      val pullers = Tool.Counter(minPullers, maxPullers)
 
       def runPuller(): Unit =
         Node.logger.info(s"Add a puller, currently ${pullers.value}")
@@ -160,6 +171,10 @@ def loadConfiguration(configurationFile: File) =
             sudo = c.configuration.compute.user orElse c.configuration.compute.sudo
           )
 
+        def morePullers(): Unit =
+          if pullers.tryIncrement()
+          then runPuller()
+
         Background.run:
           var stop = false
           while !stop
@@ -168,15 +183,16 @@ def loadConfiguration(configurationFile: File) =
               val job = JobPull.pull(c.minio, c.coordinationBucket, pullState, c.random)
 
               job match
-                case Some(job) =>
+                case PulledJob.Pulled(job) =>
                   val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job)
 
                   Background.run:
                     JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat)
 
-                  if pullers.tryIncrement()
-                  then runPuller()
-                case None =>
+                  morePullers()
+                case PulledJob.Invalid => morePullers()
+                case PulledJob.NotCheckedIn | PulledJob.JobRemoved =>
+                case PulledJob.NotFound | PulledJob.NotEnoughResource =>
                   if pullers.tryDecrement()
                   then stop = true
                   else Thread.sleep(5000)

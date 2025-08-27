@@ -39,7 +39,7 @@ object Service:
       Cron.seconds(60): () =>
         FileCache.clean(fileCache)
     val s3 =
-      Cron.seconds(60, initialSchedule = true): () =>
+      Cron.seconds(60): () =>
         JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>

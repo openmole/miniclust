@@ -51,8 +51,8 @@ object Minio:
   //val (c, minio) = client(server)
   //new Minio(minio, server, c)
 
-  def withClient[T](minio: Minio)(f: S3Client => T): T =
-    val c = client(minio.server)
+  def withClient[T](minio: Minio, timeout: Option[Int] = None)(f: S3Client => T): T =
+    val c = client(minio.server.copy(timeout = timeout.getOrElse(minio.server.timeout)))
     try f(c)
     finally c.close()
   //    val c = client(minio.server)

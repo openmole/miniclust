@@ -74,9 +74,12 @@ object JobPull:
 
 
   type SelectedJob = SubmittedJob | InvalidJob
-
   case class SubmittedJob(bucket: Bucket, id: String, submitted: Message.Submitted, allocated: ComputingResource.Allocated)
   case class InvalidJob(bucket: Bucket, id: String, exception: Throwable)
+
+  enum PulledJob:
+    case Pulled(job: SubmittedJob)
+    case NotFound, NotEnoughResource, JobRemoved, Invalid, NotCheckedIn
 
   enum NotSelected:
     case NotFound, NotEnoughResource, JobRemoved
@@ -107,7 +110,7 @@ object JobPull:
   def runningJobs(minio: Minio, coordinationBucket: Bucket) =
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
-      RunningJob.parse(i.name.drop(prefix.size), i.lastModified.get)
+      RunningJob.parse(i.name.drop(prefix.length), i.lastModified.get)
 
   def selectJob(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): SelectedJob | NotSelected =
 
@@ -166,27 +169,32 @@ object JobPull:
 
   def removeAbandonedJobs(minio: Minio, coordinationBucket: Bucket) =
     val date = Minio.date(minio)
-    val prefix = s"${MiniClust.Coordination.jobDirectory}/"
+    val prefix = s"${MiniClust.Coordination.jobDirectory}"
 
-    Minio.listAndApply(minio, coordinationBucket, prefix = prefix, recursive = true, maxKeys = Some(100)): i =>
-      if !i.dir
-      then
-        val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
-        if (date - j.ping) > 60
+    val bucketNames = Minio.listObjects(minio, coordinationBucket, prefix = s"$prefix/")
+
+    for
+      b <- bucketNames
+    do
+      Minio.listAndApply(minio, coordinationBucket, prefix = s"prefix/$b/" , maxKeys = Some(100)): i =>
+        if !i.dir
         then
-          Minio.upload(
-            minio,
-            Bucket(j.bucketName),
-            MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
-            MiniClust.User.jobStatus(j.id),
-            contentType = Some(Minio.jsonContentType)
-          )
+          val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
+          if (date - j.ping) > 60
+          then
+            Minio.upload(
+              minio,
+              Bucket(j.bucketName),
+              MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
+              MiniClust.User.jobStatus(j.id),
+              contentType = Some(Minio.jsonContentType)
+            )
 
-          Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
+            Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
 
-          logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
+            logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
 
-  @tailrec def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): Option[SubmittedJob] =
+  def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): PulledJob =
     val job = selectJob(minio, coordinationBucket, state, random)
 
     job match
@@ -200,7 +208,7 @@ object JobPull:
           Minio.delete(minio, job.bucket, MiniClust.User.submittedJob(job.id))
           clearCheckIn(minio, coordinationBucket, job)
 
-        pull(minio, coordinationBucket, state, random)
+        PulledJob.Invalid
       case job: SubmittedJob =>
         state.usageHistory.updateAccount(job.bucket.name, UsageHistory.currentHour, 60)
 
@@ -221,13 +229,14 @@ object JobPull:
               throw e
 
         tryResult match
-          case Some(j) => Some(j)
+          case Some(j) => PulledJob.Pulled(j)
           case None =>
             ComputingResource.dispose(job.allocated)
-            pull(minio, coordinationBucket, state, random)
+            PulledJob.NotCheckedIn
 
-      case NotSelected.JobRemoved => pull(minio, coordinationBucket, state, random)
-      case NotSelected.NotFound | NotSelected.NotEnoughResource => None
+      case NotSelected.JobRemoved => PulledJob.JobRemoved
+      case NotSelected.NotFound => PulledJob.NotFound
+      case NotSelected.NotEnoughResource => PulledJob.NotEnoughResource
 
   def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
     val start = Instant.now()

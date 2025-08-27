@@ -365,37 +365,99 @@ object ProcessUtil:
       res.toLong
 
 
-  // In seconds
-  def cpuTime(pid: Long) =
+//  // In seconds
+//  def cpuTime(pid: Long) =
+//    import scala.sys.process.*
+//    import scala.util.*
+//
+//    val script =
+//      s"""
+//         |ps -eo pid,ppid,cputime | awk -v target=${pid} '
+//         |    BEGIN {
+//         |        total_seconds = 0
+//         |        processes[target] = 1
+//         |    }
+//         |    {
+//         |        if ($$2 in processes) {
+//         |            processes[$$1] = 1
+//         |        }
+//         |        if ($$1 in processes) {
+//         |            # Parse cputime format (HH:MM:SS or MM:SS)
+//         |            split($$3, time_parts, ":")
+//         |            if (length(time_parts) == 3) {
+//         |                seconds = time_parts[1]*3600 + time_parts[2]*60 + time_parts[3]
+//         |            } else {
+//         |                seconds = time_parts[1]*60 + time_parts[2]
+//         |            }
+//         |            total_seconds += seconds
+//         |        }
+//         |    }
+//         |    END { print total_seconds }
+//         |'
+//         |""".stripMargin
+//
+//    Try:
+//      val res = Seq("bash", "-c", script).!!
+//      res.toDouble
+
+
+  def cpuUsage(pid: Long, sleep: Int = 1): util.Try[Double] =
     import scala.sys.process.*
     import scala.util.*
 
     val script =
-      s"""
-         |ps -eo pid,ppid,cputime | awk -v target=${pid} '
-         |    BEGIN {
-         |        total_seconds = 0
-         |        processes[target] = 1
-         |    }
-         |    {
-         |        if ($$2 in processes) {
-         |            processes[$$1] = 1
-         |        }
-         |        if ($$1 in processes) {
-         |            # Parse cputime format (HH:MM:SS or MM:SS)
-         |            split($$3, time_parts, ":")
-         |            if (length(time_parts) == 3) {
-         |                seconds = time_parts[1]*3600 + time_parts[2]*60 + time_parts[3]
-         |            } else {
-         |                seconds = time_parts[1]*60 + time_parts[2]
-         |            }
-         |            total_seconds += seconds
-         |        }
-         |    }
-         |    END { print total_seconds }
-         |'
-         |""".stripMargin
+      """#!/usr/bin/env bash
+        |# Usage: ./cpu_tree.sh <PID> [seconds]
+        |# 100% = one full core
+        |
+        |pid=$1
+        |dur=${2:-1}
+        |[ -z "$pid" ] && { echo "Usage: $0 <PID> [seconds]"; exit 1; }
+        |
+        |clk_tck=$(getconf CLK_TCK)
+        |LC_NUMERIC=C  # ensure dot decimal
+        |
+        |# Recursively collect PIDs
+        |collect_pids() {
+        |  local p=$1
+        |  [ -r /proc/$p/stat ] || return
+        |  echo $p
+        |  for t in /proc/$p/task/*/children; do
+        |    [ -r "$t" ] || continue
+        |    for c in $(<"$t"); do collect_pids "$c"; done
+        |  done
+        |}
+        |
+        |# Sum utime+stime jiffies
+        |sum_jiffies() {
+        |  for p in "$@"; do
+        |    [ -r /proc/$p/stat ] && awk '{
+        |      sub(/^[0-9]+ \([^)]*\) /,"")
+        |      print $(12)+$(13)
+        |    }' /proc/$p/stat
+        |  done | awk '{s+=$1} END{print s+0}'
+        |}
+        |
+        |pids=($(collect_pids $pid))
+        |j0=$(sum_jiffies "${pids[@]}")
+        |t0=$(date +%s%N)
+        |
+        |sleep "$dur"
+        |
+        |pids=($(collect_pids $pid))
+        |j1=$(sum_jiffies "${pids[@]}")
+        |t1=$(date +%s%N)
+        |
+        |dj=$((j1 - j0))
+        |elapsed=$(awk -v ns=$((t1 - t0)) 'BEGIN{print ns/1e9}')
+        |awk -v dj="$dj" -v clk="$clk_tck" -v sec="$elapsed" \
+        |  'BEGIN { printf "%.2f\n", (dj / (clk * sec)) * 100 }'
+        |""".stripMargin
 
     Try:
-      val res = Seq("bash", "-c", script).!!
+      val res = Seq("bash", "-c", script, s"$pid", s"$sleep").!!.trim
       res.toDouble
+
+
+// Example usage:
+// println(CpuUsage.cpuUsage(12345).getOrElse(0.0) + "%")

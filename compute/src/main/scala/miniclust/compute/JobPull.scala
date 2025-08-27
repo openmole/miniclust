@@ -191,6 +191,8 @@ object JobPull:
 
     job match
       case job: InvalidJob =>
+        state.usageHistory.updateAccount(job.bucket.name, UsageHistory.currentHour, 60)
+
         if checkIn(minio, coordinationBucket, job)
         then
           logger.info(s"${job.id}: failed to validate, ${job.exception.getMessage}")
@@ -200,6 +202,8 @@ object JobPull:
 
         pull(minio, coordinationBucket, state, random)
       case job: SubmittedJob =>
+        state.usageHistory.updateAccount(job.bucket.name, UsageHistory.currentHour, 60)
+
         def result =
           checkIn(minio, coordinationBucket, job) match
             case true =>
@@ -236,7 +240,8 @@ object JobPull:
       Minio.upload(minio, job.bucket, MiniClust.generateMessage(msg), MiniClust.User.jobStatus(job.id), contentType = Some(Minio.jsonContentType))
 
       Background.run:
-        accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, UsageHistory.elapsedSeconds(start) * job.allocated.core)
+        def allocatedTime = UsageHistory.elapsedSeconds(start) * job.allocated.core
+        accounting.updateAccount(job.bucket.name, UsageHistory.currentHour, allocatedTime)
 
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)

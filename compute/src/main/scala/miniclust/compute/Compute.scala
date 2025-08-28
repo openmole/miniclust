@@ -135,14 +135,14 @@ object Compute:
     try
       config.sudo match
         case None =>
-          ProcessUtil.createProcess(Seq("bash", "-c", command), jobDirectory(id), out, err, config.sudo)
+          ProcessUtil.createProcess(Seq("nice", "bash", "-c", command), jobDirectory(id), out, err, config.sudo)
         case Some(sudo) =>
           val fullCommand =
             Seq(
               s"sudo chown -R $sudo ${jobDirectory(id)}",
               s"sudo -u $sudo -- $command").mkString(" && ")
 
-          ProcessUtil.createProcess(Seq("bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
+          ProcessUtil.createProcess(Seq("nice", "bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
 
     catch
       case e: Exception =>

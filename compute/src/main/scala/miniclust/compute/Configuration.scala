@@ -42,7 +42,7 @@ object Configuration:
     user: Option[String],
     sudo: Option[String],
     cores: Option[Int],
-    maxCPULoad: Option[Int] = Some(110),
+    maxCPULoad: Option[Int] = Some(120),
     maxMemory: Option[Int] = Some(95)) derives derivation.ConfiguredCodec
 
   case class Worker(

@@ -1,6 +1,4 @@
-package miniclust.compute
-
-import java.time.Instant
+package miniclust.compute.tool
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -19,6 +17,7 @@ import java.time.Instant
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import java.time.Instant
 
 object IdleBucketList:
   def apply(ignoreAfter: Int, checkAfter: Int, initialBuckets: Seq[String]) =

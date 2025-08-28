@@ -1,4 +1,4 @@
-package miniclust.compute
+package miniclust.compute.tool
 
 import java.time.Instant
 

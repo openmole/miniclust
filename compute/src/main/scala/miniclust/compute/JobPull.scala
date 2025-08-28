@@ -1,6 +1,6 @@
 package miniclust.compute
 
-import miniclust.message.Minio.{Bucket, content, jsonContentType, listObjects, listUserBuckets}
+import miniclust.message.Minio.{Bucket, content, jsonContentType, listObjects}
 import miniclust.message.*
 
 import java.io.FileNotFoundException
@@ -10,6 +10,8 @@ import scala.util.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.RunningJob.{name, path}
+import miniclust.compute.tool.{IdleBucketList, TimeCache, UsageHistory}
+
 import scala.annotation.tailrec
 
 
@@ -46,20 +48,23 @@ object JobPull:
     maxMemory: Option[Int],
     history: Int,
     ignoreAfter: Int,
-    checkAfter: Int) =
-    def buckets = listUserBuckets(minio)
+    checkAfter: Int,
+    bucketCache: Int) =
+    def buckets = Minio.listUserBuckets(minio)
     val ignoreList = IdleBucketList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
 
     State(
       ComputingResource(cores, maxCPU = maxCPU, maxMemory = maxMemory),
       UsageHistory(history),
-      ignoreList
+      ignoreList,
+      TimeCache(bucketCache)
     )
 
   case class State(
     computingResource: ComputingResource,
     usageHistory: UsageHistory,
-    bucketIgnoreList: IdleBucketList)
+    bucketIgnoreList: IdleBucketList,
+    bucketCache: TimeCache[Seq[Bucket]])
 
   extension (v: SelectedJob)
     def id =
@@ -111,18 +116,33 @@ object JobPull:
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
       RunningJob.parse(i.name.drop(prefix.length), i.lastModified.get)
+  
+  def listUserBuckets(minio: Minio, state: State): Seq[Bucket] =
+    import scala.jdk.CollectionConverters.*
+    import software.amazon.awssdk.services.s3.model.GetBucketTaggingRequest
+
+    def ignore(b: Bucket) = !state.bucketIgnoreList.shouldBeChecked(b.name)
+    def ignoreValue(b: Bucket) = b.name == MiniClust.Coordination.bucketName || ignore(b)
+
+    Minio.withClient(minio): c =>
+      def listBuckets = c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).toSeq
+      state.bucketCache(() => listBuckets).filterNot(ignoreValue).flatMap: bucket =>
+        Try:
+          c.getBucketTagging(GetBucketTaggingRequest.builder().bucket(bucket.name).build())
+        .toOption.flatMap: t =>
+          if t.tagSet().asScala.map(t => t.key() -> t.value()).toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
+          then Some(bucket)
+          else None
 
   def selectJob(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): SelectedJob | NotSelected =
 
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
-      Minio.listObjects(minio, bucket, prefix = prefix, recursive = true).map: i =>
+      Minio.listObjects(minio, bucket, prefix = prefix).map: i =>
         i.name.drop(prefix.length)
 
-    def ignore(b: Bucket) = !state.bucketIgnoreList.shouldBeChecked(b.name)
-
     val (empty, notEmpty) =
-      Minio.listUserBuckets(minio, ignore).
+      listUserBuckets(minio, state).
         map(b => b -> userJobs(b)).
         partition(_._2.isEmpty)
 

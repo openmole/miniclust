@@ -149,10 +149,11 @@ def loadConfiguration(configurationFile: File) =
         ignoreAfter = 3600,
         checkAfter = 60,
         maxCPU = c.configuration.compute.maxCPULoad,
-        maxMemory = c.configuration.compute.maxMemory
+        maxMemory = c.configuration.compute.maxMemory,
+        bucketCache = 60
       )
 
-
+      Node.logger.info(s"Removing abandoned jobs")
       JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
 
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.nodeInfo, c.miniclustInfo, pullState.computingResource, c.random)

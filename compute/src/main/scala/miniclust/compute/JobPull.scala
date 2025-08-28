@@ -10,7 +10,7 @@ import scala.util.*
 import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.RunningJob.{name, path}
-import miniclust.compute.tool.{IdleBucketList, TimeCache, UsageHistory}
+import miniclust.compute.tool.{Background, Cron, IdleBucketList, TimeCache, UsageHistory}
 
 import scala.annotation.tailrec
 
@@ -116,7 +116,7 @@ object JobPull:
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
     Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
       RunningJob.parse(i.name.drop(prefix.length), i.lastModified.get)
-  
+
   def listUserBuckets(minio: Minio, state: State): Seq[Bucket] =
     import scala.jdk.CollectionConverters.*
     import software.amazon.awssdk.services.s3.model.GetBucketTaggingRequest

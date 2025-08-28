@@ -17,14 +17,14 @@ package miniclust.compute
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import miniclust.compute.Cron.StopTask
+import miniclust.compute.tool.Cron.StopTask
 import miniclust.message.*
 import miniclust.message.MiniClust.{NodeInfo, WorkerActivity}
 
 import java.util.logging.Logger
 import scala.util.Random
-
 import better.files.*
+import miniclust.compute.tool.Cron
 
 object Service:
 

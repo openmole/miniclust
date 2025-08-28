@@ -1,9 +1,4 @@
-package miniclust.compute
-
-
-import java.util.concurrent.{Callable, Executors, ThreadFactory, TimeUnit}
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.*
+package miniclust.compute.tool
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -21,6 +16,10 @@ import scala.util.*
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+import java.util.concurrent.{Callable, Executors, ThreadFactory, TimeUnit}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.*
 
 
 object Background:

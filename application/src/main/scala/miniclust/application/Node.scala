@@ -6,6 +6,7 @@ import gears.async.*
 import miniclust.compute.*
 import miniclust.compute.JobPull.PulledJob.{Invalid, Pulled}
 import miniclust.compute.JobPull.{PulledJob, executeJob}
+import miniclust.compute.tool.Background
 import miniclust.message.{MiniClust, Minio}
 
 import java.time.Instant

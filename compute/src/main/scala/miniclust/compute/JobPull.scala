@@ -13,6 +13,8 @@ import miniclust.compute.JobPull.RunningJob.{name, path}
 import miniclust.compute.tool.{Background, Cron, IdleBucketList, TimeCache, UsageHistory}
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
+import scala.util.control.Breaks
 
 
 /*
@@ -118,40 +120,43 @@ object JobPull:
       RunningJob.parse(i.name.drop(prefix.length), i.lastModified.get)
 
   def listUserBuckets(minio: Minio, state: State): Seq[Bucket] =
-    import scala.jdk.CollectionConverters.*
-    import software.amazon.awssdk.services.s3.model.GetBucketTaggingRequest
-
     def ignore(b: Bucket) = !state.bucketIgnoreList.shouldBeChecked(b.name)
     def ignoreValue(b: Bucket) = b.name == MiniClust.Coordination.bucketName || ignore(b)
-
-    Minio.withClient(minio): c =>
-      def listBuckets = c.listBuckets().buckets().asScala.map(b => Bucket(b.name())).toSeq
-      state.bucketCache(() => listBuckets).filterNot(ignoreValue).flatMap: bucket =>
-        Try:
-          c.getBucketTagging(GetBucketTaggingRequest.builder().bucket(bucket.name).build())
-        .toOption.flatMap: t =>
-          if t.tagSet().asScala.map(t => t.key() -> t.value()).toMap.get(MiniClust.User.submitBucketTag._1).contains(MiniClust.User.submitBucketTag._2)
-          then Some(bucket)
-          else None
+    def listBuckets = Minio.listUserBuckets(minio)
+    state.bucketCache(() => listBuckets).filterNot(ignoreValue)
 
   def selectJob(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): SelectedJob | NotSelected =
-
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
       Minio.listObjects(minio, bucket, prefix = prefix).map: i =>
         i.name.drop(prefix.length)
 
-    val (empty, notEmpty) =
-      listUserBuckets(minio, state).
-        map(b => b -> userJobs(b)).
-        partition(_._2.isEmpty)
+    def getFirstNonEmpty =
+      import scala.util.boundary.*
+      val empty = ListBuffer[Bucket]()
 
-    empty.foreach(b => state.bucketIgnoreList.seenEmpty(b._1.name))
+      val nonEmpty: Option[(Bucket, Seq[String])] =
+        boundary:
+          val buckets = listUserBuckets(minio, state).sortBy(b => state.usageHistory.quantity(b.name))
+
+          for
+            bucket <- buckets
+          do
+            val jobs = userJobs(bucket)
+            if jobs.nonEmpty
+            then break(Some(bucket, jobs))
+            else empty.addOne(bucket)
+
+          None
+
+      (empty, nonEmpty)
+
+    val (empty, notEmpty) = getFirstNonEmpty
+
+    empty.foreach(b => state.bucketIgnoreList.seenEmpty(b.name))
     notEmpty.foreach(b => state.bucketIgnoreList.seenNotEmpty(b._1.name))
 
-    def jobs = notEmpty.sortBy((b, _) => state.usageHistory.quantity(b.name)).headOption
-
-    jobs match
+    notEmpty match
       case Some((bucket, u)) =>
         val id = u(random.nextInt(u.size))
         validate(minio, bucket, id) match

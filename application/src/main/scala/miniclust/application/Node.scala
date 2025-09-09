@@ -76,7 +76,7 @@ def loadConfiguration(configurationFile: File) =
 
   val miniclustInfo = MiniClust.WorkerActivity.MiniClust()
   
-  val baseDirectory = File(configuration.compute.workDirectory)
+  val baseDirectory = File(configuration.compute.workDirectory) / id
   baseDirectory.createDirectories()
 
   val fileCache: FileCache = FileCache(baseDirectory / "cache", configuration.compute.cache)

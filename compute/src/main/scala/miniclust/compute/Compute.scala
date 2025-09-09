@@ -129,7 +129,9 @@ object Compute:
     baseDirectory(id).createDirectories()
     jobDirectory(id).createDirectories()
 
-  def cleanBaseDirectory(id: String)(using config: ComputeConfig) = baseDirectory(id).delete(true)
+  def cleanBaseDirectory(id: String)(using config: ComputeConfig) =
+    import scala.sys.process.*
+    s"rm -rf ${baseDirectory(id)}".run()
 
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
     try

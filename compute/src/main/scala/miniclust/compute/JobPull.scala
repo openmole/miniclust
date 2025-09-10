@@ -116,7 +116,7 @@ object JobPull:
 
   def runningJobs(minio: Minio, coordinationBucket: Bucket) =
     val prefix = s"${MiniClust.Coordination.jobDirectory}/"
-    Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.dir).map: i =>
+    Minio.listObjects(minio, coordinationBucket, prefix = prefix).filterNot(_.prefix).map: i =>
       RunningJob.parse(i.name.drop(prefix.length), i.lastModified.get)
 
   def listUserBuckets(minio: Minio, state: State): Seq[Bucket] =
@@ -196,28 +196,27 @@ object JobPull:
     val date = Minio.date(minio)
     val prefix = s"${MiniClust.Coordination.jobDirectory}"
 
-    val bucketNames = Minio.listObjects(minio, coordinationBucket, prefix = s"$prefix/")
+    val bucketNames =
+      Minio.listObjects(minio, coordinationBucket, s"$prefix/", listCommonPrefix = true).filter(_.prefix)
 
     for
       b <- bucketNames
     do
-      Minio.listAndApply(minio, coordinationBucket, prefix = s"prefix/$b/" , maxKeys = Some(100)): i =>
-        if !i.dir
+      Minio.listAndApply(minio, coordinationBucket, prefix = s"${b.name}" , maxKeys = Some(100)): i =>
+        val j = RunningJob.parse(i.name.drop(prefix.length + 1), i.lastModified.getOrElse(0L))
+        if (date - j.ping) > 60
         then
-          val j = RunningJob.parse(i.name.drop(prefix.length), i.lastModified.getOrElse(0L))
-          if (date - j.ping) > 60
-          then
-            Minio.upload(
-              minio,
-              Bucket(j.bucketName),
-              MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
-              MiniClust.User.jobStatus(j.id),
-              contentType = Some(Minio.jsonContentType)
-            )
+          Minio.upload(
+            minio,
+            Bucket(j.bucketName),
+            MiniClust.generateMessage(Message.Failed(j.id, "Job abandoned, please resubmit", Message.Failed.Reason.Abandoned)),
+            MiniClust.User.jobStatus(j.id),
+            contentType = Some(Minio.jsonContentType)
+          )
 
-            Minio.delete(minio, coordinationBucket, s"${RunningJob.path(j.bucketName, j.id)}")
+          Minio.delete(minio, coordinationBucket, i.name) //s"${RunningJob.path(j.bucketName, j.id)}")
 
-            logger.info(s"Removed job without heartbeat for user ${j.bucketName}: ${j.id}")
+          logger.info(s"Removed job without heartbeat in ${b.name}: ${j.id}")
 
   def pull(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): PulledJob =
     val job = selectJob(minio, coordinationBucket, state, random)

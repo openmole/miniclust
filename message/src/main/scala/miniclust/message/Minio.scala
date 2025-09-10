@@ -213,10 +213,10 @@ object Minio:
         case e: S3Exception if e.statusCode() == 412 => false
 
 
-  case class MinioObject(name: String, dir: Boolean, lastModified: Option[Long])
+  case class MinioObject(name: String, prefix: Boolean, lastModified: Option[Long])
 
 
-  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, maxKeys: Option[Int] = None, startAfter: Option[String] = None)(f: MinioObject => Unit) =
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = None, startAfter: Option[String] = None)(f: MinioObject => Unit) =
     withClient(minio): c =>
       val listRequest =
         val p =
@@ -233,32 +233,42 @@ object Minio:
             case Some(k) => r.maxKeys(k)
             case None => r
 
-        if !recursive
-        then r2.delimiter("/")
-        else r2
+        def r3 =
+          startAfter match
+            case Some(s) => r2.startAfter(s)
+            case None => r2
 
-      var lastKey: Option[String] = startAfter
+        if !recursive
+        then r3.delimiter("/")
+        else r3
+
+      var continuationToken: Option[String] = None
       var more = true
       val response = scala.collection.mutable.ListBuffer[MinioObject]()
 
       while more
       do
         val listedObjects =
-            lastKey match
-              case Some(k) => c.listObjectsV2(listRequest.startAfter(k).build())
+            continuationToken match
+              case Some(k) => c.listObjectsV2(listRequest.continuationToken(k).build())
               case None => c.listObjectsV2(listRequest.build())
 
         listedObjects.contents().asScala.foreach: c =>
           f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
-          lastKey = Some(c.key())
 
+        if listCommonPrefix
+        then
+          listedObjects.commonPrefixes().asScala.foreach: c =>
+            f(MinioObject(c.prefix(), true, None))
+
+        continuationToken = Some(listedObjects.nextContinuationToken())
         if !listedObjects.isTruncated
         then more = false
 
 
-  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true) =
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false) =
     val response = scala.collection.mutable.ListBuffer[MinioObject]()
-    listAndApply(minio, bucket, prefix, recursive, addSlash): c =>
+    listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix): c =>
       response.addOne(c)
 
     response.toSeq

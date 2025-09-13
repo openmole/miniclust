@@ -168,7 +168,7 @@ def loadConfiguration(configurationFile: File) =
 
         given computeConfig: Compute.ComputeConfig =
           Compute.ComputeConfig(
-            baseDirectory = File.newTemporaryDirectory("", Some(File(c.configuration.compute.workDirectory))),
+            baseDirectory = File.newTemporaryDirectory("", Some(c.baseDirectory)),
             cache = c.configuration.compute.cache,
             sudo = c.configuration.compute.user orElse c.configuration.compute.sudo
           )

@@ -73,18 +73,26 @@ object Service:
     val date = Minio.date(minio)
     def tooOld(d: Long, old: Long) = (date - d) > old
 
-
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
       val old = 7 * 60 * 60 * 24
       logger.info(s"Removing old data of bucket ${b}")
-      def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
-      def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
-      def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
 
-      for
-        f <- (oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)
+      val toClean = collection.mutable.Stack[String]()
+
+      toClean.push(
+        MiniClust.User.statusDirectory,
+        MiniClust.User.outputDirectory,
+        MiniClust.User.cancelDirectory
+      )
+
+      while toClean.nonEmpty
       do
-        Minio.delete(minio, b, f*)
+        val current = toClean.pop()
 
+        for
+          f <- Minio.listObjects(minio, b, current, listCommonPrefix = true).filter(f => tooOld(f.lastModified.get, old)).sliding(100, 100)
+        do
+          Minio.delete(minio, b, f.filter(!_.prefix).map(_.name)*)
+          toClean.pushAll(f.filter(_.prefix).map(_.name))
 
 

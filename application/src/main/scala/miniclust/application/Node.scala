@@ -154,8 +154,8 @@ def loadConfiguration(configurationFile: File) =
         bucketCache = 60
       )
 
-      Node.logger.info(s"Removing abandoned jobs")
-      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
+//      Node.logger.info(s"Removing abandoned jobs")
+//      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
 
       val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.nodeInfo, c.miniclustInfo, pullState.computingResource, c.random)
 
@@ -168,7 +168,7 @@ def loadConfiguration(configurationFile: File) =
 
         given computeConfig: Compute.ComputeConfig =
           Compute.ComputeConfig(
-            baseDirectory = File.newTemporaryDirectory("", Some(c.baseDirectory)),
+            baseDirectory = c.baseDirectory,
             cache = c.configuration.compute.cache,
             sudo = c.configuration.compute.user orElse c.configuration.compute.sudo
           )
@@ -204,7 +204,6 @@ def loadConfiguration(configurationFile: File) =
 
           Node.logger.info(s"Stop a puller, currently ${pullers.value}")
 
-          computeConfig.baseDirectory.delete(true)
       end runPuller
 
       runPuller()

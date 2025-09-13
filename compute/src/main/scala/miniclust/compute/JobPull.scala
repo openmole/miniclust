@@ -202,7 +202,7 @@ object JobPull:
     for
       b <- bucketNames
     do
-      Minio.listAndApply(minio, coordinationBucket, prefix = s"${b.name}" , maxKeys = Some(100)): i =>
+      Minio.listAndApply(minio, coordinationBucket, prefix = s"${b.name}" , maxKeys = Some(1000)): i =>
         val j = RunningJob.parse(i.name.drop(prefix.length + 1), i.lastModified.getOrElse(0L))
         if (date - j.ping) > 60
         then

@@ -25,7 +25,7 @@ import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
 import miniclust.message.Message.InputFile.Extraction
-
+import miniclust.compute.tool.Background
 import java.io.PrintStream
 import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
@@ -131,6 +131,7 @@ object Compute:
 
   def cleanBaseDirectory(id: String)(using config: ComputeConfig) =
     import scala.sys.process.*
+    s"sh -c 'sudo chown -R $$(whoami) ${baseDirectory(id)}'".run()
     s"rm -rf ${baseDirectory(id)}".run()
 
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
@@ -245,7 +246,9 @@ object Compute:
         Message.Completed(job.id)
       catch
         case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
-      finally cleanBaseDirectory(job.id)
+      finally
+        Background.run:
+          cleanBaseDirectory(job.id)
 
 
 

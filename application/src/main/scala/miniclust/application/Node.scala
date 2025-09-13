@@ -204,7 +204,7 @@ def loadConfiguration(configurationFile: File) =
 
           Node.logger.info(s"Stop a puller, currently ${pullers.value}")
 
-        computeConfig.baseDirectory.delete(true)
+          computeConfig.baseDirectory.delete(true)
       end runPuller
 
       runPuller()

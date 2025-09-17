@@ -26,14 +26,15 @@ case "$owner" in
     ;;
 esac
 
-# Disallow dangerous absolute prefixes
+# Disallow dangerous paths outside /tmp and /home
 for p in "$@"; do
-  case "$p" in
-    /etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/dev|/dev/*|/proc|/proc/*|/sys|/sys/*|/root|/root/*)
-      echo "Refusing to operate on forbidden path: $p" >&2
+  canon=$(realpath -m -- "$p")
+  case "$canon" in
+    /tmp|/tmp/*|/home|/home/*) ;;
+    *)
+      echo "Refusing to operate on forbidden path: $p (resolved to $canon)" >&2
       exit 3
       ;;
-    *) ;;
   esac
 done
 

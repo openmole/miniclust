@@ -131,7 +131,7 @@ object Compute:
 
   def cleanBaseDirectory(id: String)(using config: ComputeConfig) =
     import scala.sys.process.*
-    s"sh -c 'sudo chown -R $$(whoami) ${baseDirectory(id)}'".run()
+    ProcessUtil.chown(baseDirectory(id).pathAsString).run
     s"rm -rf ${baseDirectory(id)}".run()
 
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
@@ -142,7 +142,7 @@ object Compute:
         case Some(sudo) =>
           val fullCommand =
             Seq(
-              s"sudo chown -R $sudo ${jobDirectory(id)}",
+              ProcessUtil.chown(jobDirectory(id).pathAsString, Some(sudo)),
               s"sudo -u $sudo -- $command").mkString(" && ")
 
           ProcessUtil.createProcess(Seq("nice", "-n", "5", "bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
@@ -219,7 +219,7 @@ object Compute:
               process.dispose()
             finally
               import scala.sys.process.*
-              s"sh -c 'sudo chown -R $$(whoami) ${jobDirectory(job.id)}'".run()
+              ProcessUtil.chown(jobDirectory(job.id).pathAsString).run()
 
             process.exitValue
 
@@ -257,6 +257,16 @@ object ProcessUtil:
   import scala.jdk.CollectionConverters.*
 
   val logger = Logger.getLogger(getClass.getName)
+
+  def sudo(user: Option[String])(cmd: String) =
+    user match
+      case Some(user) => s"sudo -u $user $cmd"
+      case None => cmd
+
+  def chown(path: String, user: Option[String] = None) =
+    user match
+      case Some(user) => s"sh -c 'sudo safe-wrapper chown $user:$user $path'"
+      case None => s"sh -c 'sudo safe-wrapper chown $$(whoami):$$(whoami) $path'"
 
   class MyProcess(process: Process, user: Option[String]):
     def isAlive: Boolean = process.isAlive
@@ -306,9 +316,7 @@ object ProcessUtil:
             |kill_tree "$1"
             |""".stripMargin
 
-        user match
-          case Some(user) => s"sudo -u $user bash -c '$killAll' bash ${process.pid()}"
-          case None => s"bash -c '$killAll' bash ${process.pid()}"
+        sudo(user)(s"bash -c '$killAll' bash ${process.pid()}")
 
       import scala.sys.process.*
       logger.info(s"Killing process ${process.pid()}")
@@ -332,6 +340,9 @@ object ProcessUtil:
 
     val p = builder.start()
     MyProcess(p, user)
+
+//  def diskUsage(f: File, user: Option[String]) =
+//    """sudo -u $user"""
 
   // In KB
   def memory(pid: Long) =

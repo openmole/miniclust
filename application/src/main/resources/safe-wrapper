@@ -1,0 +1,41 @@
+#!/bin/bash
+set -euo pipefail
+
+# Usage: safe-wrapper chown owner[:group] path...
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 chown {job|job:job|miniclust|miniclust:miniclust} paths..." >&2
+  exit 2
+fi
+
+cmd="$1"; shift
+
+# Only allow chown as the command
+if [[ "$cmd" != "chown" ]]; then
+  echo "Only 'chown' is allowed as a command, got: $cmd" >&2
+  exit 2
+fi
+
+owner="$1"; shift
+
+# Only allow these owners
+case "$owner" in
+  job|job:job|miniclust|miniclust:miniclust) ;;
+  *)
+    echo "Owner not allowed: $owner" >&2
+    exit 2
+    ;;
+esac
+
+# Disallow dangerous absolute prefixes
+for p in "$@"; do
+  case "$p" in
+    /etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/dev|/dev/*|/proc|/proc/*|/sys|/sys/*|/root|/root/*)
+      echo "Refusing to operate on forbidden path: $p" >&2
+      exit 3
+      ;;
+    *) ;;
+  esac
+done
+
+# Execute chown with safe flags: -hPR
+exec /bin/chown -hPR "$owner" "$@"

@@ -68,21 +68,7 @@ lazy val documentation = project
   ) dependsOn message
 
 //val prefix = "/opt/docker/application/"
-lazy val application = project.in(file("application")) dependsOn(compute) enablePlugins (JavaServerAppPackaging) settings(
-  //  daemonUserUid in Docker := None,
-  //  daemonUser in Docker    := "openmoleconnect",
-  //  dockerChmodType := DockerChmodType.UserGroupWriteExecute,
-  //  dockerAdditionalPermissions += (DockerChmodType.UserGroupPlusExecute, "/opt/docker/bin/application"),
-  //  dockerAdditionalPermissions += (DockerChmodType.UserGroupWriteExecute, "/home/demiourgos728/.openmole-connect"),
-  //libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0",
-//  Docker / mappings ++=
-//    Seq(
-//      (dependencyFile in client in Compile).value -> s"$prefix/webapp/js/connect-deps.js",
-//      (fullOptJS in client in Compile).value.data -> s"$prefix/webapp/js/connect.js"
-//    ) ++ doMapping((resourceDirectory in client in Compile).value, prefix)
-//      ++ doMapping((cssFile in client in target).value, s"$prefix/webapp/css/")
-//      ++ doMapping((resourceDirectory in client in Compile).value / "webapp" / "fonts", s"$prefix/webapp/fonts/"),
-
+lazy val application = project.in(file("application")) dependsOn(compute) enablePlugins (JavaServerAppPackaging, DockerPlugin) settings(
   libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0",
   libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
   libraryDependencies += "org.slf4j" % "slf4j-nop" % "2.0.17",
@@ -91,31 +77,40 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
     {
       import com.typesafe.sbt.packager.docker.*
       val dockerCommandsValue = dockerCommands.value
-
       val executionStageOffset = dockerCommandsValue.indexWhere(_ == DockerStageBreak) + 3
       dockerCommands.value.take(executionStageOffset) ++ Seq(
-      Cmd("RUN",
-        """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
-          |apt-get update && \
-          |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps&& \
-          |apt-get install -y singularity-container && \
-          |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
-          |mkdir -p /lib/modules && \
-          |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf && \
-          |useradd --system --create-home --uid 1002 job && \
-          |echo "miniclust ALL=(job) NOPASSWD: ALL" > /etc/sudoers.d/miniclust_to_job && \
-          |chmod 440 /etc/sudoers.d/miniclust_to_job && \
-          |echo 'miniclust ALL=(root) NOPASSWD: /bin/chown -R job *' > /etc/sudoers.d/miniclust_chown && \
-          |echo 'miniclust ALL=(root) NOPASSWD: /bin/chown -R miniclust *' >> /etc/sudoers.d/miniclust_chown && \
-          |chmod 440 /etc/sudoers.d/miniclust_chown
-          |""".stripMargin)
-      ) ++ dockerCommands.value.drop(executionStageOffset)
+        Cmd("COPY", "safe-wrapper", "/usr/bin/safe-wrapper"),
+        Cmd("RUN",
+          """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
+            |apt-get update && \
+            |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps && \
+            |apt-get install -y singularity-container && \
+            |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
+            |mkdir -p /lib/modules && \
+            |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf && \
+            |useradd --system --create-home --uid 1001 miniclust && \
+            |useradd --system --create-home --uid 1002 job && \
+            |chmod 555 /usr/bin/safe-wrapper && \
+            |chown root:root /usr/bin/safe-wrapper && \
+            |echo "miniclust ALL=(job) NOPASSWD: ALL" > /etc/sudoers.d/miniclust_to_job && \
+            |chmod 440 /etc/sudoers.d/miniclust_to_job && \
+            |echo 'miniclust ALL=(root) NOPASSWD: /usr/bin/safe-wrapper *' > /etc/sudoers.d/miniclust_wrapper && \
+            |chmod 440 /etc/sudoers.d/miniclust_wrapper
+            |""".stripMargin),
+          //Cmd("USER", "miniclust")
+        ) ++ dockerCommands.value.drop(executionStageOffset)
+  },
+  Docker / stage := {
+    val stageValue = (Docker /stage).value
+    val chowValue = (Compile / resourceDirectory).value / "safe-wrapper"
+    IO.copyFile(chowValue, stageValue / "safe-wrapper")
+    stageValue
   },
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerUpdateLatest := true,
   dockerBaseImage := "openjdk:24-slim",
-  Universal / javaOptions ++= Seq("-J-Xmx400m")
+  Universal / javaOptions ++= Seq("-J-Xmx400m"),
 )
 
 ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))

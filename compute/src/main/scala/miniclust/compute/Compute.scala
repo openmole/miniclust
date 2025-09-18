@@ -244,11 +244,12 @@ object Compute:
 
         uploadOutputError(None)
         Message.Completed(job.id)
-      catch
-        case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
-      finally
-        Background.run:
-          cleanBaseDirectory(job.id)
+
+    catch
+      case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
+    finally
+      Background.run:
+        cleanBaseDirectory(job.id)
 
 
 
@@ -341,8 +342,13 @@ object ProcessUtil:
     val p = builder.start()
     MyProcess(p, user)
 
-//  def diskUsage(f: File, user: Option[String]) =
-//    """sudo -u $user"""
+  // In KB
+  def diskUsage(f: File, user: Option[String]) =
+    import scala.sys.process.*
+    import scala.util.*
+    Try:
+      val res = sudo(user)(s"""du -k ${f.pathAsString}""").!!.trim
+      res.toLong
 
   // In KB
   def memory(pid: Long) =
@@ -475,5 +481,34 @@ object ProcessUtil:
       res.toDouble
 
 
-// Example usage:
-// println(CpuUsage.cpuUsage(12345).getOrElse(0.0) + "%")
+class ReservoirSampler(
+  size: Int,
+  pid: Long,
+  user: Option[String],
+  directory: File):
+
+  val times: Array[Long] = Array.fill(size)(-1L)
+  val samples: Array[(memory: Long, disk: Long, cpu: Double)] = Array.fill(size)(null)
+  val random = util.Random(pid)
+  var sampled = 0
+
+  def sample() = synchronized:
+    val s =
+      for
+        mem <- ProcessUtil.memory(pid)
+        disk <- ProcessUtil.diskUsage(directory, user)
+        cpu <- ProcessUtil.cpuUsage(pid)
+      yield (memory = mem, disk = disk, cpu = cpu)
+    s.foreach: s =>
+      val time = System.currentTimeMillis()
+      val index =
+        if sampled < size
+        then sampled
+        else random.nextInt(size)
+
+      times(index) = time
+      samples(index) = s
+      sampled += 1
+
+
+

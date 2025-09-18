@@ -198,6 +198,9 @@ object Compute:
             logger.info(s"${job.id}: run ${job.submitted.command}")
             val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
+//            val sampler = ReservoirSampler(100, process.pid, config.sudo, jobDirectory(job.id))
+//            val samplerCron = tool.Cron.seconds(10, initialSchedule = true)(sampler.sample)
+
             try
               while process.isAlive
               do
@@ -218,6 +221,7 @@ object Compute:
 
               process.dispose()
             finally
+//              samplerCron.stop()
               import scala.sys.process.*
               ProcessUtil.chown(jobDirectory(job.id).pathAsString).run()
 
@@ -232,6 +236,7 @@ object Compute:
             def message = s"Return exit code of execution was not 0 but ${exit}"
             uploadOutputError(Some(s"${job.id}: $message"))
             boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.ExecutionFailed))
+
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
         try
@@ -347,7 +352,7 @@ object ProcessUtil:
     import scala.sys.process.*
     import scala.util.*
     Try:
-      val res = sudo(user)(s"""du -k ${f.pathAsString}""").!!.trim
+      val res = sudo(user)(s"""du -ks ${f.pathAsString}""").!!.trim.takeWhile(_.isDigit)
       res.toLong
 
   // In KB
@@ -356,72 +361,40 @@ object ProcessUtil:
     import scala.util.*
 
     val script =
-      s"""
-         |#!/bin/bash
-         |
-         |get_descendants() {
-         |    local pid=$$1
-         |    local children=$$(ps --no-headers -o pid --ppid "$$pid")
-         |    for child in $$children; do
-         |        echo $$child
-         |        get_descendants $$child
-         |    done
-         |}
-         |
-         |PID=$pid
-         |
-         |# Start with the main process
-         |ALL_PIDS=($$PID)
-         |
-         |# Add all descendants
-         |while read -r child; do
-         |    ALL_PIDS+=($$child)
-         |done < <(get_descendants $$PID)
-         |
-         |# Sum RSS for all PIDs
-         |ps -o rss= -p $$(IFS=,; echo "$${ALL_PIDS[*]}") | awk '{sum+=$$1} END {print sum}'
-         |""".stripMargin
+      """
+        |#!/usr/bin/env bash
+        |# Usage: ./mem_tree.sh <PID>
+        |# Reports total resident memory (RSS) of PID and its children, in kB
+        |
+        |pid=$1
+        |[ -z "$pid" ] && { echo "Usage: $0 <PID>"; exit 1; }
+        |
+        |# Recursively collect PIDs
+        |collect_pids() {
+        |  local p=$1
+        |  [ -r /proc/$p/stat ] || return
+        |  echo $p
+        |  for t in /proc/$p/task/*/children; do
+        |    [ -r "$t" ] || continue
+        |    for c in $(<"$t"); do collect_pids "$c"; done
+        |  done
+        |}
+        |
+        |# Sum RSS (resident set size, in kB) from /proc/[pid]/status
+        |sum_rss() {
+        |  for p in "$@"; do
+        |    [ -r /proc/$p/status ] && awk '/VmRSS:/ {print $2}' /proc/$p/status
+        |  done | awk '{s+=$1} END{print s+0}'
+        |}
+        |
+        |# Collect and compute
+        |pids=($(collect_pids $pid))
+        |sum_rss "${pids[@]}"
+        |""".stripMargin
 
     Try:
-      val res = Seq("bash", "-c", script).!!.trim
+      val res = Seq("bash", "-c", script, "--", s"$pid").!!.trim
       res.toLong
-
-
-//  // In seconds
-//  def cpuTime(pid: Long) =
-//    import scala.sys.process.*
-//    import scala.util.*
-//
-//    val script =
-//      s"""
-//         |ps -eo pid,ppid,cputime | awk -v target=${pid} '
-//         |    BEGIN {
-//         |        total_seconds = 0
-//         |        processes[target] = 1
-//         |    }
-//         |    {
-//         |        if ($$2 in processes) {
-//         |            processes[$$1] = 1
-//         |        }
-//         |        if ($$1 in processes) {
-//         |            # Parse cputime format (HH:MM:SS or MM:SS)
-//         |            split($$3, time_parts, ":")
-//         |            if (length(time_parts) == 3) {
-//         |                seconds = time_parts[1]*3600 + time_parts[2]*60 + time_parts[3]
-//         |            } else {
-//         |                seconds = time_parts[1]*60 + time_parts[2]
-//         |            }
-//         |            total_seconds += seconds
-//         |        }
-//         |    }
-//         |    END { print total_seconds }
-//         |'
-//         |""".stripMargin
-//
-//    Try:
-//      val res = Seq("bash", "-c", script).!!
-//      res.toDouble
-
 
   def cpuUsage(pid: Long, sleep: Int = 1): util.Try[Double] =
     import scala.sys.process.*
@@ -460,24 +433,35 @@ object ProcessUtil:
         |  done | awk '{s+=$1} END{print s+0}'
         |}
         |
+        |# First snapshot
         |pids=($(collect_pids $pid))
         |j0=$(sum_jiffies "${pids[@]}")
         |t0=$(date +%s%N)
         |
         |sleep "$dur"
         |
+        |# Second snapshot
         |pids=($(collect_pids $pid))
-        |j1=$(sum_jiffies "${pids[@]}")
+        |if [ ${#pids[@]} -eq 0 ]; then
+        |  j1=$j0   # process tree gone → assume no more CPU
+        |else
+        |  j1=$(sum_jiffies "${pids[@]}")
+        |fi
         |t1=$(date +%s%N)
         |
         |dj=$((j1 - j0))
         |elapsed=$(awk -v ns=$((t1 - t0)) 'BEGIN{print ns/1e9}')
+        |
         |awk -v dj="$dj" -v clk="$clk_tck" -v sec="$elapsed" \
-        |  'BEGIN { printf "%.2f\n", (dj / (clk * sec)) * 100 }'
+        |  'BEGIN {
+        |     usage = (dj / (clk * sec)) * 100
+        |     if (usage < 0) usage = 0
+        |     printf "%.2f\n", usage
+        |   }'
         |""".stripMargin
 
     Try:
-      val res = Seq("bash", "-c", script, s"$pid", s"$sleep").!!.trim
+      val res = Seq("bash", "-c", script, "--", s"$pid", s"$sleep").!!.trim
       res.toDouble
 
 
@@ -487,10 +471,10 @@ class ReservoirSampler(
   user: Option[String],
   directory: File):
 
-  val times: Array[Long] = Array.fill(size)(-1L)
-  val samples: Array[(memory: Long, disk: Long, cpu: Double)] = Array.fill(size)(null)
-  val random = util.Random(pid)
-  var sampled = 0
+  private val times: Array[Long] = Array.fill(size)(-1L)
+  private val samples: Array[(memory: Long, disk: Long, cpu: Double)] = Array.fill(size)(null)
+  private val random = util.Random(pid)
+  private var nbSampled = 0
 
   def sample() = synchronized:
     val s =
@@ -499,16 +483,18 @@ class ReservoirSampler(
         disk <- ProcessUtil.diskUsage(directory, user)
         cpu <- ProcessUtil.cpuUsage(pid)
       yield (memory = mem, disk = disk, cpu = cpu)
+
     s.foreach: s =>
       val time = System.currentTimeMillis()
       val index =
-        if sampled < size
-        then sampled
+        if nbSampled < size
+        then nbSampled
         else random.nextInt(size)
 
       times(index) = time
       samples(index) = s
-      sampled += 1
+      nbSampled += 1
 
-
+  def sampled = synchronized:
+    (times zip samples).take(nbSampled).sortBy(_._1)
 

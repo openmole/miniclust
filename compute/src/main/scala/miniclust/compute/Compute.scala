@@ -67,7 +67,7 @@ object Compute:
             FileCache.setPermissions(file)
           case Some(Extraction.TarGZ) =>
             val tmpDirectory = File.newTemporaryDirectory()
-            if scala.sys.process.Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").run().exitValue() != 0
+            if scala.sys.process.Process(s"tar -xzf ${tmp} -C ${tmpDirectory}").! != 0
             then
               tmpDirectory.delete(true)
               throw new InvalidParameterException(s"Error extracting the archive ${remote}, should be a tgz archive")
@@ -131,8 +131,8 @@ object Compute:
 
   def cleanBaseDirectory(id: String)(using config: ComputeConfig) =
     import scala.sys.process.*
-    ProcessUtil.chown(baseDirectory(id).pathAsString).run
-    s"rm -rf ${baseDirectory(id)}".run()
+    ProcessUtil.chown(baseDirectory(id).pathAsString).!
+    s"rm -rf ${baseDirectory(id)}".!
 
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
     try
@@ -223,7 +223,7 @@ object Compute:
             finally
 //              samplerCron.stop()
               import scala.sys.process.*
-              ProcessUtil.chown(jobDirectory(job.id).pathAsString).run()
+              ProcessUtil.chown(jobDirectory(job.id).pathAsString).!
 
             process.exitValue
 
@@ -326,7 +326,7 @@ object ProcessUtil:
 
       import scala.sys.process.*
       logger.info(s"Killing process ${process.pid()}")
-      killCommand.run()
+      killCommand.!
 
     def exitValue: Int = process.exitValue()
 

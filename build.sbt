@@ -26,7 +26,7 @@ lazy val compute = project
     libraryDependencies += "com.github.pathikrit" %% "better-files" % "3.9.2",
     libraryDependencies += "io.circe" %% "circe-yaml" % "0.16.1",
     libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0",
-    libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.2",
+    libraryDependencies += "com.github.ben-manes.caffeine" % "caffeine" % "3.2.3",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .dependsOn(message)
@@ -36,9 +36,9 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
-    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.33.5",
-    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.33.5",
-    libraryDependencies += "commons-codec" % "commons-codec" % "1.19.0",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.37.5",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.37.5",
+    libraryDependencies += "commons-codec" % "commons-codec" % "1.20.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
     libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.3",
@@ -64,7 +64,7 @@ lazy val documentation = project
       "SCALA_VERSION" -> scalaVersion.value,
     ),
     libraryDependencies += "com.softwaremill.sttp.apispec" %% "jsonschema-circe" % "0.11.10",
-    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.11.38"
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.12.2"
   ) dependsOn message
 
 //val prefix = "/opt/docker/application/"

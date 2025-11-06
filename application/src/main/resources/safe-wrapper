@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: safe-wrapper chown owner[:group] path...
+# Usage: safe-wrapper chown [-R] owner[:group] path...
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 chown {job|job:job|miniclust|miniclust:miniclust} paths..." >&2
+  echo "Usage: $0 chown [-R] {job|job:job|miniclust|miniclust:miniclust} paths..." >&2
   exit 2
 fi
 
@@ -13,6 +13,12 @@ cmd="$1"; shift
 if [[ "$cmd" != "chown" ]]; then
   echo "Only 'chown' is allowed as a command, got: $cmd" >&2
   exit 2
+fi
+
+recursive_flag=""
+if [[ "$1" == "-R" ]]; then
+  recursive_flag="-R"
+  shift
 fi
 
 owner="$1"; shift
@@ -38,5 +44,5 @@ for p in "$@"; do
   esac
 done
 
-# Execute chown with safe flags: -hPR
-exec /bin/chown -hPR "$owner" "$@"
+# Execute chown with safe flags: -hP plus optional -R
+exec /bin/chown -hP $recursive_flag "$owner" "$@"

@@ -269,10 +269,11 @@ object ProcessUtil:
       case Some(user) => s"sudo -u $user $cmd"
       case None => cmd
 
-  def chown(path: String, user: Option[String] = None) =
+  def chown(path: String, user: Option[String] = None, recursive: Boolean = true) =
+    val recursiveFlag = if recursive then "-R" else ""
     user match
-      case Some(user) => s"sh -c 'sudo safe-wrapper chown $user:$user $path'"
-      case None => s"sh -c 'sudo safe-wrapper chown $$(whoami):$$(whoami) $path'"
+      case Some(user) => s"sh -c 'sudo safe-wrapper chown $recursiveFlag $user:$user $path'"
+      case None => s"sh -c 'sudo safe-wrapper chown $recursiveFlag $$(whoami):$$(whoami) $path'"
 
   class MyProcess(process: Process, user: Option[String]):
     def isAlive: Boolean = process.isAlive

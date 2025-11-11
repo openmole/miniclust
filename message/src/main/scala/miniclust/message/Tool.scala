@@ -116,7 +116,7 @@ object Tool:
       """
         |cores=$(nproc)
         |load_avg=$(cut -d ' ' -f1 /proc/loadavg)
-        |cpu_avg_pct=$(awk -v load="$load_avg" -v cores="$cores" 'BEGIN { printf("%.2f", (load / cores) * 100) }')
+        |cpu_avg_pct=$(awk -v loadavg="$load_avg" -v cores="$cores" 'BEGIN { printf("%.2f", (loadavg / cores) * 100) }')
         |echo $cpu_avg_pct""".stripMargin
 
     import scala.sys.process.*

@@ -81,9 +81,8 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
       dockerCommands.value.take(executionStageOffset) ++ Seq(
         Cmd("COPY", "safe-wrapper", "/usr/bin/safe-wrapper"),
         Cmd("RUN",
-          """echo "deb http://deb.debian.org/debian unstable main non-free contrib" >> /etc/apt/sources.list && \
-            |apt-get update && \
-            |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps && \
+          """apt-get update && \
+            |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps gawk && \
             |apt-get install -y singularity-container && \
             |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
             |mkdir -p /lib/modules && \
@@ -109,7 +108,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Docker / packageName := "openmole/miniclust",
   Docker / organization := "openmole",
   dockerUpdateLatest := true,
-  dockerBaseImage := "openjdk:24-slim",
+  dockerBaseImage := "eclipse-temurin:25",
   Universal / javaOptions ++= Seq("-J-Xmx400m"),
 )
 

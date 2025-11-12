@@ -137,7 +137,11 @@ object JobPull:
 
       val nonEmpty: Option[(Bucket, Seq[String])] =
         boundary:
-          val buckets = listUserBuckets(minio, state).sortBy(b => state.usageHistory.quantity(b.name))
+          val buckets =
+            Random.shuffle(listUserBuckets(minio, state)).
+              sortBy(b => state.usageHistory.quantity(b.name))
+
+          val tried = ListBuffer[(Bucket, Int)]()
 
           for
             bucket <- buckets
@@ -152,6 +156,10 @@ object JobPull:
       (empty, nonEmpty)
 
     val (empty, notEmpty) = getFirstNonEmpty
+
+    logger.info(s"""
+                |Listed buckets, not empty: ${notEmpty.map(b => (b._1.name, b._2.size)).getOrElse("None")}, empty: ${empty.mkString(", ")}
+                |Usage: ${state.usageHistory.quantities.toSeq.sortBy(_._1).mkString(", ")}""".stripMargin)
 
     empty.foreach(b => state.bucketIgnoreList.seenEmpty(b.name))
     notEmpty.foreach(b => state.bucketIgnoreList.seenNotEmpty(b._1.name))

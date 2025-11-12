@@ -43,7 +43,7 @@ import software.amazon.awssdk.utils.AttributeMap
 object Minio:
   def jsonContentType = "application/json"
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 20, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 30, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =
@@ -216,7 +216,7 @@ object Minio:
   case class MinioObject(name: String, prefix: Boolean, lastModified: Option[Long])
 
 
-  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = None, startAfter: Option[String] = None)(f: MinioObject => Unit) =
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = Some(200), startAfter: Option[String] = None)(f: MinioObject => Unit) =
     withClient(minio): c =>
       val listRequest =
         val p =
@@ -226,6 +226,7 @@ object Minio:
 
         def r = ListObjectsV2Request.builder()
           .bucket(bucket.name)
+          .fetchOwner(false)
           .prefix(p)
 
         def r2 =

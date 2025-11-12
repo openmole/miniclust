@@ -157,7 +157,19 @@ def loadConfiguration(configurationFile: File) =
 //      Node.logger.info(s"Removing abandoned jobs")
 //      JobPull.removeAbandonedJobs(c.minio, c.coordinationBucket)
 
-      val services = Service.startBackgroud(c.minio, c.coordinationBucket, c.fileCache, c.nodeInfo, c.miniclustInfo, pullState.computingResource, c.random)
+      val trashDirectory = c.baseDirectory / "trash"
+      trashDirectory.createDirectories()
+
+      val services =
+        Service.startBackgroud(
+          c.minio,
+          c.coordinationBucket,
+          c.fileCache,
+          c.nodeInfo,
+          c.miniclustInfo,
+          pullState.computingResource,
+          trashDirectory,
+          c.random)
 
       val maxPullers = math.max(10, c.cores / 4)
       val minPullers = 1
@@ -169,6 +181,7 @@ def loadConfiguration(configurationFile: File) =
         given computeConfig: Compute.ComputeConfig =
           Compute.ComputeConfig(
             baseDirectory = c.baseDirectory,
+            trashDirectory = trashDirectory,
             cache = c.configuration.compute.cache,
             sudo = c.configuration.compute.user orElse c.configuration.compute.sudo
           )

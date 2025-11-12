@@ -45,4 +45,4 @@ for p in "$@"; do
 done
 
 # Execute chown with safe flags: -hP plus optional -R
-exec /bin/chown -hP $recursive_flag "$owner" "$@"
+exec /bin/chown --no-dereference $recursive_flag "$owner" "$@"

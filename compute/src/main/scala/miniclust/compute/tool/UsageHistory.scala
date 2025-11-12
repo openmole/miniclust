@@ -23,7 +23,7 @@ import java.time.Instant
 object UsageHistory:
   case class Hour(hour: Long, consumedSeconds: Long)
   def currentHour = Instant.now().getEpochSecond / 3600
-  def elapsedSeconds(t: Instant) = Instant.now().getEpochSecond - t.getEpochSecond
+  def elapsedSeconds(t: Instant) = Math.max(60, Instant.now().getEpochSecond - t.getEpochSecond)
 
   def clean(map: Map[String, List[UsageHistory.Hour]], expire: Long) =
     map.map: (k, v) =>
@@ -48,3 +48,8 @@ class UsageHistory(expireAfterHour: Int):
 
   def quantity(id: String) = synchronized:
     accounts.getOrElse(id, List()).map(_.consumedSeconds).sum
+
+
+  def quantities = synchronized:
+    accounts.map: a =>
+      a._1 -> a._2.map(_.consumedSeconds).sum

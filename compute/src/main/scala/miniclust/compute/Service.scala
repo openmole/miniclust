@@ -30,7 +30,15 @@ object Service:
 
   val logger = Logger.getLogger(getClass.getName)
 
-  def startBackgroud(minio: Minio, coordinationBucket: Minio.Bucket, fileCache: FileCache, nodeInfo: NodeInfo, miniclust: WorkerActivity.MiniClust, resource: ComputingResource, random: Random) =
+  def startBackgroud(
+    minio: Minio,
+    coordinationBucket: Minio.Bucket,
+    fileCache: FileCache,
+    nodeInfo: NodeInfo,
+    miniclust: WorkerActivity.MiniClust,
+    resource: ComputingResource,
+    trashDirectory: File,
+    random: Random) =
     val removeRandom = Random(random.nextLong)
     val s1 =
       Cron.seconds(60 * 60): () =>
@@ -55,8 +63,17 @@ object Service:
       Cron.seconds(60 * 60): () =>
         if random.nextDouble() < 0.1
         then removeOldActivity(minio, coordinationBucket)
-    
-    StopTask.combine(s1, s2, s3, s4, s5)
+
+    val s6 =
+      Cron.seconds(60): () =>
+        def cleanDirectory(file: File) =
+          import scala.sys.process.*
+          ProcessUtil.chown(file.pathAsString).!
+          s"rm -rf ${file.pathAsString}".!
+
+        trashDirectory.list.foreach(cleanDirectory)
+
+    StopTask.combine(s1, s2, s3, s4, s5, s6)
 
 
   def removeOldActivity(minio: Minio, coordinationBucket: Minio.Bucket) =

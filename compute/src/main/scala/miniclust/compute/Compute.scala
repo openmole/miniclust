@@ -38,16 +38,17 @@ object Compute:
   val logger = Logger.getLogger(getClass.getName)
 
   object ComputeConfig:
-    def apply(baseDirectory: File, cache: Int, sudo: Option[String] = None) =
+    def apply(baseDirectory: File, trashDirectory: File, cache: Int, sudo: Option[String] = None) =
       baseDirectory.createDirectories()
       val jobDirectory = baseDirectory / "jobs"
       jobDirectory.createDirectories()
-      new ComputeConfig(baseDirectory, jobDirectory, sudo)
+      new ComputeConfig(baseDirectory, jobDirectory, trashDirectory, sudo)
 
-  case class ComputeConfig(baseDirectory: File, jobDirectory: File, sudo: Option[String])
+  case class ComputeConfig(baseDirectory: File, jobDirectory: File, trashDirectory: File, sudo: Option[String])
 
   def baseDirectory(id: String)(using config: ComputeConfig) = config.jobDirectory / id.split(":")(1)
   def jobDirectory(id: String)(using config: ComputeConfig) = baseDirectory(id) / "job"
+  def trashDirectory(using config: ComputeConfig) = config.trashDirectory
 
   def prepare(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, fileCache: FileCache): Seq[FileCache.UsedKey] =
     def createCache(file: File, remote: String, providedHash: String, extraction: Option[Extraction] = None) =
@@ -129,11 +130,11 @@ object Compute:
     baseDirectory(id).createDirectories()
     jobDirectory(id).createDirectories()
 
-  def cleanBaseDirectory(id: String)(using config: ComputeConfig) =
+  def moveBaseDirecotryToTrash(id: String)(using config: ComputeConfig) =
     import scala.sys.process.*
-    ProcessUtil.chown(baseDirectory(id).pathAsString).!
-    s"rm -rf ${baseDirectory(id)}".!
-
+    ProcessUtil.chown(baseDirectory(id).pathAsString, recursive = false).!
+    s"mv ${baseDirectory(id)} ${trashDirectory}".!
+  
   def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
     try
       config.sudo match
@@ -253,8 +254,7 @@ object Compute:
     catch
       case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
     finally
-      Background.run:
-        cleanBaseDirectory(job.id)
+      Compute.moveBaseDirecotryToTrash(job.id)
 
 
 

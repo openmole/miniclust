@@ -13,6 +13,9 @@ import scala.util.*
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCredentialsProvider}
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
+import software.amazon.awssdk.core.interceptor.Context.ModifyHttpRequest
+import software.amazon.awssdk.core.interceptor.{ExecutionAttributes, ExecutionInterceptor}
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.http.*
 import software.amazon.awssdk.regions.Region
@@ -76,18 +79,40 @@ object Minio:
     else builder.build()
 
   private def client(server: Server) =
+
+//    val myInterceptor =
+//      def ensureTrailingSlash(uri: java.net.URI): java.net.URI =
+//        val path = Option(uri.getPath).getOrElse("")
+//        val newPath = if (path.endsWith("/")) path else path + "/"
+//
+//        new java.net.URI(
+//          uri.getScheme,
+//          uri.getUserInfo,
+//          uri.getHost,
+//          uri.getPort,
+//          newPath,
+//          uri.getQuery,
+//          uri.getFragment
+//        )
+//
+//
+//      new ExecutionInterceptor:
+//        override def modifyHttpRequest(context: ModifyHttpRequest, attr: ExecutionAttributes) =
+//          val req = context.httpRequest()
+//          val newURI = ensureTrailingSlash(req.getUri)
+//          req.toBuilder().uri(newURI).build()
+
     val c = httpClient(server)
     S3Client.builder()
       .endpointOverride(java.net.URI.create(server.url))
       .region(Region.US_EAST_1)
-      .credentialsProvider(StaticCredentialsProvider.create(
-        AwsBasicCredentials.create(server.user, server.password)
-      ))
+      .credentialsProvider(
+        StaticCredentialsProvider.create(
+          AwsBasicCredentials.create(server.user, server.password)
+        ))
       .httpClient(c)
-      .serviceConfiguration(S3Configuration.builder()
-        .pathStyleAccessEnabled(true)
-        .build()
-      ).build()
+      .forcePathStyle(true)
+      .build()
 
 
   def bucket(minio: Minio, name: String, create: Boolean = true) =
@@ -216,7 +241,7 @@ object Minio:
   case class MinioObject(name: String, prefix: Boolean, lastModified: Option[Long])
 
 
-  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = Some(200), startAfter: Option[String] = None)(f: MinioObject => Unit) =
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = Some(100), startAfter: Option[String] = None)(f: MinioObject => Unit) =
     withClient(minio): c =>
       val listRequest =
         val p =
@@ -227,6 +252,7 @@ object Minio:
         def r = ListObjectsV2Request.builder()
           .bucket(bucket.name)
           .fetchOwner(false)
+          .encodingType(EncodingType.URL)
           .prefix(p)
 
         def r2 =
@@ -267,7 +293,7 @@ object Minio:
         then more = false
 
 
-  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = true, listCommonPrefix: Boolean = false) =
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false) =
     val response = scala.collection.mutable.ListBuffer[MinioObject]()
     listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix): c =>
       response.addOne(c)

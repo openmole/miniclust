@@ -46,9 +46,9 @@ object Service:
     val s2 =
       Cron.seconds(60): () =>
         FileCache.clean(fileCache)
-    val s3 =
-      Cron.seconds(60, initialSchedule = true): () =>
-        JobPull.removeAbandonedJobs(minio, coordinationBucket)
+//    val s3 =
+//      Cron.seconds(60, initialSchedule = true): () =>
+//        JobPull.removeAbandonedJobs(minio, coordinationBucket)
     val s4 =
       Cron.seconds(60): () =>
         val usage = WorkerActivity.Usage(
@@ -73,7 +73,7 @@ object Service:
 
         trashDirectory.list.foreach(cleanDirectory)
 
-    StopTask.combine(s1, s2, s3, s4, s5, s6)
+    StopTask.combine(s1, s2, s4, s5, s6)
 
 
   def removeOldActivity(minio: Minio, coordinationBucket: Minio.Bucket) =

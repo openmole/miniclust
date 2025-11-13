@@ -141,11 +141,9 @@ object Compute:
         case None =>
           ProcessUtil.createProcess(Seq("nice", "-n", "5", "bash", "-c", command), jobDirectory(id), out, err, config.sudo)
         case Some(sudo) =>
-          val fullCommand =
-            Seq(
-              ProcessUtil.chown(jobDirectory(id).pathAsString, Some(sudo)),
-              s"sudo -u $sudo -- $command").mkString(" && ")
-
+          import scala.sys.process.*
+          ProcessUtil.chown(jobDirectory(id).pathAsString, Some(sudo)).!
+          val fullCommand = s"sudo -u $sudo -- $command"
           ProcessUtil.createProcess(Seq("nice", "-n", "5", "bash", "-c", fullCommand), jobDirectory(id), out, err, config.sudo)
 
     catch
@@ -197,6 +195,7 @@ object Compute:
 
           val exit =
             logger.info(s"${job.id}: run ${job.submitted.command}")
+
             val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
 //            val sampler = ReservoirSampler(100, process.pid, config.sudo, jobDirectory(job.id))

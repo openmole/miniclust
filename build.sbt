@@ -36,8 +36,8 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
-    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.37.5",
-    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.37.5",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.38.5",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.38.5",
     libraryDependencies += "commons-codec" % "commons-codec" % "1.20.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,

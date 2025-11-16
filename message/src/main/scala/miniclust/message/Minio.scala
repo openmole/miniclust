@@ -16,6 +16,7 @@ import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
 import software.amazon.awssdk.core.interceptor.Context.ModifyHttpRequest
 import software.amazon.awssdk.core.interceptor.{ExecutionAttributes, ExecutionInterceptor}
+import software.amazon.awssdk.core.retry.RetryPolicy
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.http.*
 import software.amazon.awssdk.regions.Region
@@ -46,7 +47,7 @@ import software.amazon.awssdk.utils.AttributeMap
 object Minio:
   def jsonContentType = "application/json"
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 30, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 20, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =
@@ -79,29 +80,6 @@ object Minio:
     else builder.build()
 
   private def client(server: Server) =
-
-//    val myInterceptor =
-//      def ensureTrailingSlash(uri: java.net.URI): java.net.URI =
-//        val path = Option(uri.getPath).getOrElse("")
-//        val newPath = if (path.endsWith("/")) path else path + "/"
-//
-//        new java.net.URI(
-//          uri.getScheme,
-//          uri.getUserInfo,
-//          uri.getHost,
-//          uri.getPort,
-//          newPath,
-//          uri.getQuery,
-//          uri.getFragment
-//        )
-//
-//
-//      new ExecutionInterceptor:
-//        override def modifyHttpRequest(context: ModifyHttpRequest, attr: ExecutionAttributes) =
-//          val req = context.httpRequest()
-//          val newURI = ensureTrailingSlash(req.getUri)
-//          req.toBuilder().uri(newURI).build()
-
     val c = httpClient(server)
     S3Client.builder()
       .endpointOverride(java.net.URI.create(server.url))
@@ -112,6 +90,12 @@ object Minio:
         ))
       .httpClient(c)
       .forcePathStyle(true)
+      .overrideConfiguration(
+        ClientOverrideConfiguration.builder()
+          .retryPolicy(
+            RetryPolicy.builder().numRetries(3).build()
+          ).build()
+      )
       .build()
 
 
@@ -241,7 +225,7 @@ object Minio:
   case class MinioObject(name: String, prefix: Boolean, lastModified: Option[Long])
 
 
-  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = Some(100), startAfter: Option[String] = None)(f: MinioObject => Unit) =
+  def listAndApply(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxKeys: Option[Int] = Some(100), maxList: Option[Int] = None, startAfter: Option[String] = None)(f: MinioObject => Unit) =
     withClient(minio): c =>
       val listRequest =
         val p =
@@ -271,7 +255,9 @@ object Minio:
 
       var continuationToken: Option[String] = None
       var more = true
-      val response = scala.collection.mutable.ListBuffer[MinioObject]()
+
+      var total = 0
+      def isFull = maxList.exists(l => total >= l)
 
       while more
       do
@@ -281,7 +267,10 @@ object Minio:
               case None => c.listObjectsV2(listRequest.build())
 
         listedObjects.contents().asScala.foreach: c =>
-          f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
+          if !isFull
+          then
+            total += 1
+            f(MinioObject(c.key(), c.key().endsWith("/"), Option(c.lastModified()).map(_.getEpochSecond)))
 
         if listCommonPrefix
         then
@@ -289,13 +278,13 @@ object Minio:
             f(MinioObject(c.prefix(), true, None))
 
         continuationToken = Some(listedObjects.nextContinuationToken())
-        if !listedObjects.isTruncated
+        if !listedObjects.isTruncated || isFull
         then more = false
 
 
-  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false) =
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxList: Option[Int] = None) =
     val response = scala.collection.mutable.ListBuffer[MinioObject]()
-    listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix): c =>
+    listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix, maxList = maxList): c =>
       response.addOne(c)
 
     response.toSeq

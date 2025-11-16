@@ -40,15 +40,19 @@ object Service:
     trashDirectory: File,
     random: Random) =
     val removeRandom = Random(random.nextLong)
+
     val s1 =
-      Cron.seconds(60 * 60): () =>
+      Cron.seconds(random.nextInt(24 * 60 * 60)): () =>
         removeOldData(minio, coordinationBucket, removeRandom)
+
     val s2 =
       Cron.seconds(60): () =>
         FileCache.clean(fileCache)
-//    val s3 =
-//      Cron.seconds(60, initialSchedule = true): () =>
-//        JobPull.removeAbandonedJobs(minio, coordinationBucket)
+
+    val s3 =
+      Cron.seconds(60, initialSchedule = true): () =>
+        JobPull.removeAbandonedJobs(minio, coordinationBucket, removeRandom)
+
     val s4 =
       Cron.seconds(60): () =>
         val usage = WorkerActivity.Usage(
@@ -73,7 +77,11 @@ object Service:
 
         trashDirectory.list.foreach(cleanDirectory)
 
-    StopTask.combine(s1, s2, s4, s5, s6)
+    val s7 =
+      Cron.seconds(random.nextInt(24 * 60 * 60)): () =>
+        removeOldAccounting(minio, coordinationBucket)
+
+    StopTask.combine(s1, s2, s3, s4, s5, s6, s7)
 
 
   def removeOldActivity(minio: Minio, coordinationBucket: Minio.Bucket) =
@@ -86,16 +94,34 @@ object Service:
     for f <- oldActivity.map(_.name).sliding(100, 100)
     do Minio.delete(minio, coordinationBucket, f*)
 
+  def tooOld(d: Long, old: Long, date: Long) = (date - d) > old
+
+  def removeOldAccounting(minio: Minio, coordinationBucket: Minio.Bucket) =
+    val date = Minio.date(minio)
+    def maxList = Some(10000)
+    val old = 7 * 60 * 60 * 24
+
+    def oldAccounting = Minio.listObjects(minio, coordinationBucket, MiniClust.Coordination.accountingDirectory, maxList = maxList).filter(f => tooOld(f.lastModified.get, old, date))
+
+    for
+      f <- oldAccounting.map(_.name).sliding(100, 100)
+    do
+      Minio.delete(minio, coordinationBucket, f*)
+
+
   def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val date = Minio.date(minio)
-    def tooOld(d: Long, old: Long) = (date - d) > old
+
+    def recursive = false
+    def maxList = Some(1000)
+
+    val old = 7 * 60 * 60 * 24
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
-      val old = 7 * 60 * 60 * 24
       logger.info(s"Removing old data of bucket ${b}")
-      def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
-      def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
-      def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = true).filter(f => tooOld(f.lastModified.get, old))
+      def oldStatus = Minio.listObjects(minio, b, MiniClust.User.statusDirectory, recursive = recursive, maxList = maxList).filter(f => tooOld(f.lastModified.get, old, date))
+      def oldOutputs = Minio.listObjects(minio, b, MiniClust.User.outputDirectory, recursive = recursive, maxList = maxList).filter(f => tooOld(f.lastModified.get, old, date))
+      def oldCancel = Minio.listObjects(minio, b, MiniClust.User.cancelDirectory, recursive = recursive, maxList = maxList).filter(f => tooOld(f.lastModified.get, old, date))
 
       for
         f <- (oldStatus ++ oldOutputs ++ oldCancel).map(_.name).sliding(100, 100)

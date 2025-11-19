@@ -103,9 +103,9 @@ object JobPull:
 
   case class RunningJob(bucketName: String, id: String, ping: Long)
 
-  def startHeartBeat(minio: Minio, coordinationBucket: Bucket, job: SubmittedJob) =
+  def startHeartBeat(minio: Minio, coordinationBucket: Bucket, job: SubmittedJob, interval: Int = 30) =
     val message = MiniClust.generateMessage(job.submitted)
-    Cron.seconds(5): () =>
+    Cron.seconds(interval): () =>
       Minio.upload(minio, coordinationBucket, message, JobPull.RunningJob.path(job.bucket.name, job.id), contentType = Some(Minio.jsonContentType))
 
   def canceled(minio: Minio, bucket: Bucket, id: String) =
@@ -135,11 +135,26 @@ object JobPull:
       import scala.util.boundary.*
       val empty = ListBuffer[Bucket]()
 
+      def weightedShuffleGumbel[T](elements: Seq[T], weights: Seq[Double], rnd: Random): Seq[T] =
+        val scored =
+          (elements zip weights).map: (elem, w) =>
+            val key =
+              if w == 0
+              then Double.PositiveInfinity
+              else
+                val u = rnd.nextDouble()
+                math.log(u) / w
+
+            (elem, key)
+
+        scored.sortBy(_._2).map(_._1).reverse
+
+
       val nonEmpty: Option[(Bucket, Seq[String])] =
         boundary:
           val buckets =
-            Random.shuffle(listUserBuckets(minio, state)).
-              sortBy(b => state.usageHistory.quantity(b.name))
+            val userBuckets = listUserBuckets(minio, state)
+            weightedShuffleGumbel(userBuckets, userBuckets.map(b => state.usageHistory.quantity(b.name)), random)
 
           val tried = ListBuffer[(Bucket, Int)]()
 

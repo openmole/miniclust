@@ -199,7 +199,7 @@ def loadConfiguration(configurationFile: File) =
 
               job match
                 case PulledJob.Pulled(job) =>
-                  val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job)
+                  val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job, 30)
 
                   Background.run:
                     JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat)

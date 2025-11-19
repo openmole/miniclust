@@ -47,7 +47,7 @@ import software.amazon.awssdk.utils.AttributeMap
 object Minio:
   def jsonContentType = "application/json"
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 20, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 20, retry: Int = 3, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =
@@ -92,8 +92,9 @@ object Minio:
       .forcePathStyle(true)
       .overrideConfiguration(
         ClientOverrideConfiguration.builder()
+          .apiCallTimeout(Duration.ofSeconds(server.timeout))
           .retryPolicy(
-            RetryPolicy.builder().numRetries(3).build()
+            RetryPolicy.builder().numRetries(server.retry).build()
           ).build()
       )
       .build()

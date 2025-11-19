@@ -114,7 +114,7 @@ object Compute:
         val local = o._2
         if !local.exists
         then throw new InvalidParameterException(s"Standard output file $o does not exist")
-        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o._1}")
+        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${o._1}", timeout = Some(120))
 
   def uploadOutputFiles(minio: Minio, bucket: Minio.Bucket, r: Message.Submitted, id: String)(using config: ComputeConfig, s: Async.Spawn) =
     r.outputFile.map: output =>
@@ -123,7 +123,7 @@ object Compute:
         if !local.exists
         then throw new InvalidParameterException(s"Output file ${output.local} does not exist")
         logger.info(s"${id}: upload file ${local} to ${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
-        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}")
+        Minio.upload(minio, bucket, local.toJava, s"${MiniClust.User.jobOutputDirectory(id)}/${output.remote}", timeout = Some(120))
 
   def createDirectories(id: String)(using config: ComputeConfig) =
     baseDirectory(id).delete(true)

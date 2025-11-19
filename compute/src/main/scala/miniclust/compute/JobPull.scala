@@ -198,14 +198,14 @@ object JobPull:
     logger.info(s"${job.id}: clear check in ${RunningJob.path(job.bucket.name, job.id)}")
     Minio.delete(minio, coordinationBucket, RunningJob.path(job.bucket.name, job.id))
 
-  def jobAbandoned(j: RunningJob, date: Long) = (date - j.ping) > 60
+  def abandonedJob(j: RunningJob, date: Long) = (date - j.ping) > 120
 
   def checkAbandoned(minio: Minio, coordinationBucket: Bucket, job: SelectedJob): Unit =
     Minio.listAndApply(minio, coordinationBucket, RunningJob.path(job.bucket.name, job.id)): o =>
       val date = Minio.date(minio)
       val prefix = s"${MiniClust.Coordination.jobDirectory}"
       val j = RunningJob.parse(o.name.drop(prefix.length + 1), o.lastModified.getOrElse(0L))
-      if jobAbandoned(j, date)
+      if abandonedJob(j, date)
       then
         Minio.upload(
           minio,
@@ -233,7 +233,7 @@ object JobPull:
       logger.info(s"Check abandoned in $b")
       Minio.listAndApply(minio, coordinationBucket, prefix = s"${b.name}"): i =>
         val j = RunningJob.parse(i.name.drop(prefix.length + 1), i.lastModified.getOrElse(0L))
-        if jobAbandoned(j, date)
+        if abandonedJob(j, date)
         then
           Minio.upload(
             minio,

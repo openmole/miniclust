@@ -191,8 +191,8 @@ object Minio:
       catch
         case e: software.amazon.awssdk.services.s3.model.NoSuchKeyException => throw FileNotFoundException(s"File ${path} not found in bucket ${bucket.name}")
 
-  def upload(minio: Minio, bucket: Bucket, local: File | String, path: String, overwrite: Boolean = true, contentType: Option[String] = None): Boolean =
-    withClient(minio): c =>
+  def upload(minio: Minio, bucket: Bucket, local: File | String, path: String, overwrite: Boolean = true, contentType: Option[String] = None, timeout: Option[Int] = None): Boolean =
+    withClient(minio, timeout = timeout): c =>
       val headers =
         if !overwrite then Map("If-None-Match" -> "*").asJava else Map().asJava
 

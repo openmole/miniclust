@@ -26,6 +26,8 @@ import software.amazon.awssdk.http.apache.ApacheHttpClient
 import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.utils.AttributeMap
 
+import java.util.zip.GZIPInputStream
+
 /*
  * Copyright (C) 2025 Romain Reuillon
  *
@@ -47,7 +49,7 @@ import software.amazon.awssdk.utils.AttributeMap
 object Minio:
   def jsonContentType = "application/json"
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 20, retry: Int = 3, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 30, retry: Int = 3, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =

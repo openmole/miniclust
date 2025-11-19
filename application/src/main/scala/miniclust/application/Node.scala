@@ -49,7 +49,7 @@ object Node:
 def loadConfiguration(configurationFile: File) =
   val configuration = Configuration.read(configurationFile)
 
-  val cores = configuration.compute.cores.getOrElse(Runtime.getRuntime.availableProcessors())
+  val cores = configuration.compute.cores.getOrElse((Runtime.getRuntime.availableProcessors() * 1.2).toInt)
 
   val storage =
     configuration.worker.storage match

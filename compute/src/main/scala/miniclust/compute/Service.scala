@@ -42,7 +42,7 @@ object Service:
     val removeRandom = Random(random.nextLong)
 
     val s1 =
-      Cron.seconds(random.nextInt(24 * 60 * 60)): () =>
+      Cron.seconds(24 * 60 * 60, startDelay = Some(random.nextInt(24 * 60 * 60))): () =>
         removeOldData(minio, coordinationBucket, removeRandom)
 
     val s2 =
@@ -50,7 +50,7 @@ object Service:
         FileCache.clean(fileCache)
 
     val s3 =
-      Cron.seconds(60, initialSchedule = true): () =>
+      Cron.seconds(120, initialSchedule = true, startDelay = Some(random.nextInt(120))): () =>
         JobPull.removeAbandonedJobs(minio, coordinationBucket, removeRandom)
 
     val s4 =
@@ -63,8 +63,9 @@ object Service:
         )
         val currentActivity = WorkerActivity(nodeInfo, miniclust, usage)
         MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
+
     val s5 =
-      Cron.seconds(60 * 60): () =>
+      Cron.seconds(60 * 60, startDelay = Some(random.nextInt(60 * 60))): () =>
         if random.nextDouble() < 0.1
         then removeOldActivity(minio, coordinationBucket)
 
@@ -78,7 +79,7 @@ object Service:
         trashDirectory.list.foreach(cleanDirectory)
 
     val s7 =
-      Cron.seconds(random.nextInt(24 * 60 * 60)): () =>
+      Cron.seconds(24 * 60 * 60, startDelay = Some(random.nextInt(24 * 60 * 60))): () =>
         removeOldAccounting(minio, coordinationBucket)
 
     StopTask.combine(s1, s2, s3, s4, s5, s6, s7)

@@ -53,10 +53,10 @@ object Cron:
   sealed trait StopTask:
     def stop(): Unit
 
-  def seconds(delay: Int, fail: Boolean = false, initialSchedule: Boolean = false)(task: () => Unit): StopTask =
+  def seconds(delay: Int, fail: Boolean = false, initialSchedule: Boolean = false, startDelay: Option[Int] = None)(task: () => Unit): StopTask =
     val stopTask = StopTask.UnitStopTask(Some(delay))
 
-    def schedule(initial: Boolean): Unit =
+    def schedule(initial: Boolean, first: Boolean): Unit =
       val scheduledTask = new Runnable:
         override def run(): Unit =
           Future:
@@ -66,15 +66,17 @@ object Cron:
           .onComplete:
             case Success(_) =>
               stopTask.delay.foreach: w =>
-                schedule(false)
+                schedule(false, false)
             case Failure(_) =>
               if !fail
-              then schedule(false)
+              then schedule(false, false)
 
       if initial
       then scheduledTask.run()
-      else scheduler.schedule(scheduledTask, delay, TimeUnit.SECONDS)
+      else
+        def delayValue = if first then startDelay.getOrElse(delay) else delay
+        scheduler.schedule(scheduledTask, delayValue, TimeUnit.SECONDS)
 
-    schedule(initialSchedule)
+    schedule(initialSchedule, first = true)
     stopTask
 

@@ -47,9 +47,10 @@ object Node:
       if elapsed < seconds then Thread.sleep((seconds - elapsed) * 1000)
 
 def loadConfiguration(configurationFile: File) =
+  val overprovision =  1.1
   val configuration = Configuration.read(configurationFile)
 
-  val cores = configuration.compute.cores.getOrElse((Runtime.getRuntime.availableProcessors() * 1.2).toInt)
+  val cores = configuration.compute.cores.getOrElse((Runtime.getRuntime.availableProcessors() * overprovision).toInt)
 
   val storage =
     configuration.worker.storage match
@@ -220,7 +221,7 @@ def loadConfiguration(configurationFile: File) =
       end runPuller
 
       runPuller()
-      Node.logger.info(s"Worker (${c.nodeInfo.id}) is running, pulling jobs, resources: ${c.cores} cores")
+      Node.logger.info(s"Worker (${c.nodeInfo.id}) is running, pulling jobs, resources: ${c.cores} slots")
 
       val finished = Semaphore(0)
       scala.sys.addShutdownHook:

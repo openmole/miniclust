@@ -140,14 +140,14 @@ object JobPull:
           (elements zip weights).map: (elem, w) =>
             val key =
               if w == 0
-              then Double.PositiveInfinity
+              then Double.NegativeInfinity
               else
                 val u = rnd.nextDouble()
-                math.log(u) / w
+                -math.log(u) / w
 
             (elem, key)
 
-        scored.sortBy(_._2).map(_._1).reverse
+        scored.sortBy(_._2).map(_._1)
 
 
       val nonEmpty: Option[(Bucket, Seq[String])] =

@@ -94,7 +94,6 @@ object Minio:
       .forcePathStyle(true)
       .overrideConfiguration(
         ClientOverrideConfiguration.builder()
-          .apiCallTimeout(Duration.ofSeconds(server.timeout))
           .retryPolicy(
             RetryPolicy.builder().numRetries(server.retry).build()
           ).build()

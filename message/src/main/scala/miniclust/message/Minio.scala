@@ -284,9 +284,9 @@ object Minio:
         then more = false
 
 
-  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxList: Option[Int] = None) =
+  def listObjects(minio: Minio, bucket: Bucket, prefix: String, recursive: Boolean = false, addSlash: Boolean = false, listCommonPrefix: Boolean = false, maxList: Option[Int] = None, maxKeys: Option[Int] = Some(100)) =
     val response = scala.collection.mutable.ListBuffer[MinioObject]()
-    listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix, maxList = maxList): c =>
+    listAndApply(minio, bucket, prefix, recursive, addSlash, listCommonPrefix = listCommonPrefix, maxList = maxList, maxKeys = maxKeys): c =>
       response.addOne(c)
 
     response.toSeq

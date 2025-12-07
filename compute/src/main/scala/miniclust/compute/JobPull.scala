@@ -128,7 +128,7 @@ object JobPull:
   def selectJob(minio: Minio, coordinationBucket: Bucket, state: State, random: Random): SelectedJob | NotSelected =
     def userJobs(bucket: Bucket) =
       val prefix = s"${MiniClust.User.submitDirectory}/"
-      Minio.listObjects(minio, bucket, prefix = prefix, maxList = Some(1000)).map: i =>
+      Minio.listObjects(minio, bucket, prefix = prefix, maxList = Some(1000), maxKeys = Some(1000)).map: i =>
         i.name.drop(prefix.length)
 
     def getFirstNonEmpty =

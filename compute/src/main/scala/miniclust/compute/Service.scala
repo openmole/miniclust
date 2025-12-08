@@ -19,7 +19,7 @@ package miniclust.compute
 
 import miniclust.compute.tool.Cron.StopTask
 import miniclust.message.*
-import miniclust.message.MiniClust.{NodeInfo, WorkerActivity}
+import miniclust.message.MiniClust.*
 
 import java.util.logging.Logger
 import scala.util.Random
@@ -31,14 +31,14 @@ object Service:
   val logger = Logger.getLogger(getClass.getName)
 
   def startBackgroud(
-    minio: Minio,
-    coordinationBucket: Minio.Bucket,
-    fileCache: FileCache,
-    nodeInfo: NodeInfo,
-    miniclust: WorkerActivity.MiniClust,
-    resource: ComputingResource,
-    trashDirectory: File,
-    random: Random) =
+                      minio: Minio,
+                      coordinationBucket: Minio.Bucket,
+                      fileCache: FileCache,
+                      nodeInfo: NodeInfo,
+                      miniclust: Accounting.Worker.MiniClust,
+                      resource: ComputingResource,
+                      trashDirectory: File,
+                      random: Random) =
     val removeRandom = Random(random.nextLong)
 
     val s1 =
@@ -55,14 +55,14 @@ object Service:
 
     val s4 =
       Cron.seconds(60): () =>
-        val usage = WorkerActivity.Usage(
+        val usage = MiniClust.Accounting.Worker.Usage(
           cores = nodeInfo.cores - ComputingResource.freeCore(resource),
           availableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable,
           availableMemory = Tool.availableMemory,
           load = Tool.machineLoad
         )
-        val currentActivity = WorkerActivity(nodeInfo, miniclust, usage)
-        MiniClust.WorkerActivity.publish(minio, coordinationBucket, currentActivity)
+        val currentActivity = MiniClust.Accounting.Worker(nodeInfo, miniclust, usage)
+        MiniClust.Accounting.Worker.publish(minio, coordinationBucket, currentActivity)
 
     val s6 =
       Cron.seconds(60): () =>

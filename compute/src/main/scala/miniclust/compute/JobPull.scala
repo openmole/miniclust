@@ -325,8 +325,8 @@ object JobPull:
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
-        val usage = MiniClust.JobResourceUsage(job.bucket.name, nodeInfo, elapsed, job.submitted.resource, msg)
-        MiniClust.JobResourceUsage.publish(minio, coordinationBucket, usage)
+        val usage = MiniClust.Accounting.Job(job.bucket.name, nodeInfo, elapsed, job.submitted.resource, msg)
+        MiniClust.Accounting.Job.publish(minio, coordinationBucket, usage)
     finally
       ComputingResource.dispose(job.allocated)
       heartBeat.stop()

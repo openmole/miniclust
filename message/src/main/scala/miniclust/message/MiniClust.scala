@@ -64,30 +64,6 @@ object MiniClust:
 
   def jobId(run: Message.Submitted) = Tool.hashString(generateMessage(run))
 
-  object WorkerActivity:
-    given derivation.Configuration = Tool.jsonConfiguration
-    given Codec[WorkerActivity] = derivation.ConfiguredCodec.derived
-
-    def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
-      val content = activity.asJson.noSpaces
-      import com.github.f4b6a3.ulid.*
-      val ulid = UlidCreator.getUlid
-      Minio.upload(minio, coordinationBucket, content, s"${Coordination.workerAccountingDirectory}/${ulid.toLowerCase}")
-
-    case class MiniClust(
-      version: String = miniclust.BuildInfo.version,
-      build: Long = miniclust.BuildInfo.buildTime) derives derivation.ConfiguredCodec
-
-    case class Usage(
-      cores: Int,
-      availableSpace: Long,
-      availableMemory: Long,
-      load: Double) derives derivation.ConfiguredCodec
-
-  case class WorkerActivity(
-    nodeInfo: NodeInfo,
-    miniclust: WorkerActivity.MiniClust,
-    usage: WorkerActivity.Usage)
 
   object NodeInfo:
     given derivation.Configuration = Tool.jsonConfiguration
@@ -115,23 +91,52 @@ object MiniClust:
     space: Long,
     memory: Long)
 
+  object Accounting:
+    object Job:
+      given derivation.Configuration = Tool.jsonConfiguration
+      given Codec[Job] = derivation.ConfiguredCodec.derived
 
-  object JobResourceUsage:
-    given derivation.Configuration = Tool.jsonConfiguration
-    given Codec[JobResourceUsage] = derivation.ConfiguredCodec.derived
+      def publish(minio: Minio, coordinationBucket: Minio.Bucket, usage: Job) =
+        import com.github.f4b6a3.ulid.*
+        val content = usage.asJson.noSpaces
+        val ulid = UlidCreator.getUlid
+        val path = s"${Coordination.jobAccountingDirectory}/${ulid.toLowerCase}"
+        Minio.upload(minio, coordinationBucket, content, path)
 
-    def publish(minio: Minio, coordinationBucket: Minio.Bucket, usage: JobResourceUsage) =
-      import com.github.f4b6a3.ulid.*
-      val content = usage.asJson.noSpaces
-      val ulid = UlidCreator.getUlid
-      val path = s"${Coordination.jobAccountingDirectory}/${ulid.toLowerCase}"
-      Minio.upload(minio, coordinationBucket, content, path)
+      def parse(j: String): Job = parser.parse(j).toTry.get.as[Job].toTry.get
 
-    def parse(j: String): JobResourceUsage = parser.parse(j).toTry.get.as[JobResourceUsage].toTry.get
+    case class Job(
+      bucket: String,
+      nodeInfo: NodeInfo,
+      second: Long,
+      resource: Seq[Message.Resource],
+      finalState: Message)
 
-  case class JobResourceUsage(
-    bucket: String,
-    nodeInfo: NodeInfo,
-    second: Long,
-    resource: Seq[Message.Resource],
-    finalState: Message)
+    object Worker:
+      given derivation.Configuration = Tool.jsonConfiguration
+
+      given Codec[Worker] = derivation.ConfiguredCodec.derived
+
+      def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: Worker) =
+        val content = activity.asJson.noSpaces
+        import com.github.f4b6a3.ulid.*
+        val ulid = UlidCreator.getUlid
+        Minio.upload(minio, coordinationBucket, content, s"${Coordination.workerAccountingDirectory}/${ulid.toLowerCase}")
+
+      def parse(j: String): Worker = parser.parse(j).toTry.get.as[Worker].toTry.get
+
+
+      case class MiniClust(
+        version: String = miniclust.BuildInfo.version,
+        build: Long = miniclust.BuildInfo.buildTime) derives derivation.ConfiguredCodec
+
+      case class Usage(
+        cores: Int,
+        availableSpace: Long,
+        availableMemory: Long,
+        load: Double) derives derivation.ConfiguredCodec
+
+    case class Worker(
+      nodeInfo: NodeInfo,
+      miniclust: Worker.MiniClust,
+      usage: Worker.Usage)

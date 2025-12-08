@@ -75,7 +75,7 @@ def loadConfiguration(configurationFile: File) =
         idFile.contentAsString.takeWhile(_ != '\n')
       case None =>  UUID.randomUUID().toString
 
-  val miniclustInfo = MiniClust.WorkerActivity.MiniClust()
+  val miniclustInfo = MiniClust.Accounting.Worker.MiniClust()
   
   val baseDirectory = File(configuration.compute.workDirectory) / id
   baseDirectory.createDirectories()

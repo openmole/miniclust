@@ -29,10 +29,9 @@ object MiniClust:
   object Coordination:
     def bucketName = "miniclust"
     def jobDirectory = "job"
-    def workerDirectory = "worker"
-    def activeWorker = s"$workerDirectory/active"
-    def accountingDirectory = s"$workerDirectory/accounting"
-    def activeFile(id: String) = s"$activeWorker/${id}"
+    def accountingDirectory = "accounting"
+    def workerAccountingDirectory = s"$accountingDirectory/worker"
+    def jobAccountingDirectory = s"$accountingDirectory/job"
 
   object User:
     def submitBucketTag = ("miniclust", "submit")
@@ -71,7 +70,9 @@ object MiniClust:
 
     def publish(minio: Minio, coordinationBucket: Minio.Bucket, activity: WorkerActivity) =
       val content = activity.asJson.noSpaces
-      Minio.upload(minio, coordinationBucket, content, Coordination.activeFile(activity.nodeInfo.id))
+      import com.github.f4b6a3.ulid.*
+      val ulid = UlidCreator.getUlid
+      Minio.upload(minio, coordinationBucket, content, s"${Coordination.workerAccountingDirectory}/${ulid.toLowerCase}")
 
     case class MiniClust(
       version: String = miniclust.BuildInfo.version,
@@ -123,7 +124,7 @@ object MiniClust:
       import com.github.f4b6a3.ulid.*
       val content = usage.asJson.noSpaces
       val ulid = UlidCreator.getUlid
-      val path = s"${Coordination.accountingDirectory}/${ulid.toLowerCase}"
+      val path = s"${Coordination.jobAccountingDirectory}/${ulid.toLowerCase}"
       Minio.upload(minio, coordinationBucket, content, path)
 
     def parse(j: String): JobResourceUsage = parser.parse(j).toTry.get.as[JobResourceUsage].toTry.get

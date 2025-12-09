@@ -105,13 +105,14 @@ object Service:
   def removeOldAccounting(minio: Minio, coordinationBucket: Minio.Bucket) =
     val date = Minio.date(minio)
     val old = 7 * 60 * 60 * 24
-    removeOld(minio, coordinationBucket, MiniClust.Coordination.jobAccountingDirectory, date, old)
-    removeOld(minio, coordinationBucket, MiniClust.Coordination.workerAccountingDirectory, date, old)
+    removeOld(minio, coordinationBucket, MiniClust.Coordination.jobAccountingDirectory + "/", date, old)
+    removeOld(minio, coordinationBucket, MiniClust.Coordination.workerAccountingDirectory + "/", date, old)
 
   def removeOldCancel(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val old = 60 * 60
     val date = Minio.date(minio)
-    removeOld(minio, coordinationBucket, MiniClust.User.cancelDirectory, date, old)
+    random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
+      removeOld(minio, b, MiniClust.User.cancelDirectory + "/", date, old)
 
   def removeOldData(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val date = Minio.date(minio)
@@ -119,8 +120,8 @@ object Service:
 
     random.shuffle(Minio.listUserBuckets(minio)).take(1).foreach: b =>
       logger.info(s"Removing old data of bucket ${b}")
-      removeOld(minio, b, MiniClust.User.statusDirectory, date, old)
-      removeOld(minio, b, MiniClust.User.outputDirectory, date, old)
+      removeOld(minio, b, MiniClust.User.statusDirectory + "/", date, old)
+      removeOld(minio, b, MiniClust.User.outputDirectory + "/", date, old)
 
 
 

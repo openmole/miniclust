@@ -105,9 +105,15 @@ object MiniClust:
 
       def parse(j: String): Job = parser.parse(j).toTry.get.as[Job].toTry.get
 
+      case class ResourceUsage(
+        times: Array[Long],
+        cpu: Array[Long],
+        memory: Array[Long],
+        disk: Array[Long])
+
     case class Job(
       bucket: String,
-      nodeInfo: NodeInfo,
+      nodeId: String,
       second: Long,
       resource: Seq[Message.Resource],
       finalState: Message)

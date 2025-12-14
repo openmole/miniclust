@@ -155,7 +155,8 @@ object Compute:
   def run(
     minio: Minio,
     coordinationBucket: Minio.Bucket,
-    job: SubmittedJob)(using config: ComputeConfig, fileCache: FileCache): Message.FinalState =
+    job: SubmittedJob,
+    random: util.Random)(using config: ComputeConfig, fileCache: FileCache): Message.FinalState =
     createDirectories(job.id)
 
     try
@@ -190,6 +191,9 @@ object Compute:
                uploadOutputError(Some(s"${job.id}: error preparing files $e"))
                boundary.break(Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.PreparationFailed))
 
+
+        val sampler = ReservoirSampler(100, random.nextLong())
+
         try
           testCanceled()
 
@@ -198,8 +202,7 @@ object Compute:
 
             val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
-//            val sampler = ReservoirSampler(100, process.pid, config.sudo, jobDirectory(job.id))
-//            val samplerCron = tool.Cron.seconds(10, initialSchedule = true)(sampler.sample)
+            val samplerCron = tool.Cron.seconds(10, initialSchedule = true)(() => sampler.sample(process.pid, config.sudo, jobDirectory(job.id)))
 
             try
               while process.isAlive
@@ -221,7 +224,7 @@ object Compute:
 
               process.dispose()
             finally
-//              samplerCron.stop()
+              samplerCron.stop()
               import scala.sys.process.*
               ProcessUtil.chown(jobDirectory(job.id).pathAsString).!
 
@@ -467,16 +470,14 @@ object ProcessUtil:
 
 class ReservoirSampler(
   size: Int,
-  pid: Long,
-  user: Option[String],
-  directory: File):
+  seed: Long):
 
   private val times: Array[Long] = Array.fill(size)(-1L)
   private val samples: Array[(memory: Long, disk: Long, cpu: Double)] = Array.fill(size)(null)
-  private val random = util.Random(pid)
+  private lazy val random = util.Random(seed)
   private var nbSampled = 0
 
-  def sample() = synchronized:
+  def sample(pid: Long, user: Option[String], directory: File) = synchronized:
     val s =
       for
         mem <- ProcessUtil.memory(pid)

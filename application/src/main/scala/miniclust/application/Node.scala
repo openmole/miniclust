@@ -201,9 +201,10 @@ def loadConfiguration(configurationFile: File) =
               job match
                 case PulledJob.Pulled(job) =>
                   val heartBeat = JobPull.startHeartBeat(c.minio, c.coordinationBucket, job, 30)
+                  val seed = c.random.nextLong()
 
                   Background.run:
-                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat)
+                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat, util.Random(seed))
 
                   morePullers()
                 case PulledJob.Invalid => morePullers()

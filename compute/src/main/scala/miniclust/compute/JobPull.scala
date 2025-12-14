@@ -170,26 +170,29 @@ object JobPull:
 
       (empty, nonEmpty)
 
-    val (empty, notEmpty) = getFirstNonEmpty
+    if ComputingResource.freeCore(state.computingResource) <= 0
+    then NotSelected.NotEnoughResource
+    else
+      val (empty, notEmpty) = getFirstNonEmpty
 
-    logger.info(s"""Listed buckets, not empty: ${notEmpty.map(b => (b._1.name, b._2.size)).getOrElse("None")}, empty: ${empty.mkString(", ")}, usage state: ${state.usageHistory.quantities.toSeq.sortBy(_._1).mkString(", ")}""".stripMargin)
+      logger.info(s"""Listed buckets, not empty: ${notEmpty.map(b => (b._1.name, b._2.size)).getOrElse("None")}, empty: ${empty.mkString(", ")}, usage state: ${state.usageHistory.quantities.toSeq.sortBy(_._1).mkString(", ")}""".stripMargin)
 
-    empty.foreach(b => state.bucketIgnoreList.seenEmpty(b.name))
-    notEmpty.foreach(b => state.bucketIgnoreList.seenNotEmpty(b._1.name))
+      empty.foreach(b => state.bucketIgnoreList.seenEmpty(b.name))
+      notEmpty.foreach(b => state.bucketIgnoreList.seenNotEmpty(b._1.name))
 
-    notEmpty match
-      case Some((bucket, u)) =>
-        val id = u(random.nextInt(u.size))
-        validate(minio, bucket, id) match
-          case Success(s) =>
-            val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
-            val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
-            ComputingResource.request(state.computingResource, cores, time) match
-              case Some(r) => SubmittedJob(bucket, id, s, r)
-              case None => NotSelected.NotEnoughResource
-          case Failure(e: FileNotFoundException) => NotSelected.JobRemoved
-          case Failure(e) => InvalidJob(bucket, id, e)
-      case None => NotSelected.NotFound
+      notEmpty match
+        case Some((bucket, u)) =>
+          val id = u(random.nextInt(u.size))
+          validate(minio, bucket, id) match
+            case Success(s) =>
+              val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
+              val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
+              ComputingResource.request(state.computingResource, cores, time) match
+                case Some(r) => SubmittedJob(bucket, id, s, r)
+                case None => NotSelected.NotEnoughResource
+            case Failure(e: FileNotFoundException) => NotSelected.JobRemoved
+            case Failure(e) => InvalidJob(bucket, id, e)
+        case None => NotSelected.NotFound
 
   def validate(minio: Minio, bucket: Bucket, id: String) =
     Try:
@@ -308,11 +311,11 @@ object JobPull:
       case NotSelected.NotFound => PulledJob.NotFound
       case NotSelected.NotEnoughResource => PulledJob.NotEnoughResource
 
-  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, heartBeat: Cron.StopTask)(using Compute.ComputeConfig, FileCache) =
+  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, heartBeat: Cron.StopTask, random: util.Random)(using Compute.ComputeConfig, FileCache) =
     val start = Instant.now()
     try
       logger.info(s"${job.id}: running")
-      val msg = Compute.run(minio, coordinationBucket, job)
+      val msg = Compute.run(minio, coordinationBucket, job, random)
       logger.info(s"${job.id}: job finished ${msg}")
 
       val elapsed = UsageHistory.elapsedSeconds(start)
@@ -325,7 +328,7 @@ object JobPull:
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
-        val usage = MiniClust.Accounting.Job(job.bucket.name, nodeInfo, elapsed, job.submitted.resource, msg)
+        val usage = MiniClust.Accounting.Job(job.bucket.name, nodeInfo.id, elapsed, job.submitted.resource, msg)
         MiniClust.Accounting.Job.publish(minio, coordinationBucket, usage)
     finally
       ComputingResource.dispose(job.allocated)

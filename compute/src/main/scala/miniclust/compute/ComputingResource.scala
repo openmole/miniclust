@@ -48,7 +48,7 @@ object ComputingResource:
         logger.info(s"Machine overloaded: cpu ${usage.cpu}, mem ${usage.mem} (limits ${pool.maxCPULoad}, ${pool.maxMemory})")
         None
       else
-        if pool.core >= core
+        if core >= 1 && pool.core >= core
         then
           pool.core -= core
           Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime), time.getOrElse(pool.defaultTime)))

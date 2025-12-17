@@ -20,6 +20,7 @@ package miniclust.message
 import com.github.f4b6a3.ulid.Ulid
 import io.circe.*
 import io.circe.syntax.*
+import miniclust.message.MiniClust.Accounting.Worker.Usage
 
 import java.util.UUID
 
@@ -105,18 +106,19 @@ object MiniClust:
 
       def parse(j: String): Job = parser.parse(j).toTry.get.as[Job].toTry.get
 
-      case class ResourceUsage(
-        times: Array[Long],
-        cpu: Array[Long],
-        memory: Array[Long],
-        disk: Array[Long])
+      case class Profile(
+        time: Array[Int],
+        cpu: Array[Float],
+        memory: Array[Float],
+        disk: Array[Float]) derives derivation.ConfiguredCodec
 
     case class Job(
       bucket: String,
       nodeId: String,
       second: Long,
       resource: Seq[Message.Resource],
-      finalState: Message)
+      finalState: Message,
+      profile: Option[Job.Profile])
 
     object Worker:
       given derivation.Configuration = Tool.jsonConfiguration
@@ -130,7 +132,6 @@ object MiniClust:
         Minio.upload(minio, coordinationBucket, content, s"${Coordination.workerAccountingDirectory}/${ulid.toLowerCase}")
 
       def parse(j: String): Worker = parser.parse(j).toTry.get.as[Worker].toTry.get
-
 
       case class MiniClust(
         version: String = miniclust.BuildInfo.version,

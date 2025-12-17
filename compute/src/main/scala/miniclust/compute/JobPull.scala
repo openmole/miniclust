@@ -315,7 +315,7 @@ object JobPull:
     val start = Instant.now()
     try
       logger.info(s"${job.id}: running")
-      val msg = Compute.run(minio, coordinationBucket, job, random)
+      val (msg, profile) = Compute.run(minio, coordinationBucket, job, random)
       logger.info(s"${job.id}: job finished ${msg}")
 
       val elapsed = UsageHistory.elapsedSeconds(start)
@@ -328,8 +328,8 @@ object JobPull:
         if msg.canceled
         then JobPull.clearCancel(minio, job.bucket, job.id)
 
-        val usage = MiniClust.Accounting.Job(job.bucket.name, nodeInfo.id, elapsed, job.submitted.resource, msg)
-        MiniClust.Accounting.Job.publish(minio, coordinationBucket, usage)
+        val jobAccounting = MiniClust.Accounting.Job(job.bucket.name, nodeInfo.id, elapsed, job.submitted.resource, msg, profile)
+        MiniClust.Accounting.Job.publish(minio, coordinationBucket, jobAccounting)
     finally
       ComputingResource.dispose(job.allocated)
       heartBeat.stop()

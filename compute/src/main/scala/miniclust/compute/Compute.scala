@@ -33,6 +33,7 @@ import java.util.logging.{Level, Logger}
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.ExecutorService
+import MiniClust.Accounting
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
@@ -135,7 +136,7 @@ object Compute:
     ProcessUtil.chown(baseDirectory(id).pathAsString, recursive = false).!
     s"mv ${baseDirectory(id)} ${trashDirectory}".!
   
-  def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[Message.FinalState]): ProcessUtil.MyProcess =
+  def createProcess(id: String, command: String, out: Option[File], err: Option[File])(using config: ComputeConfig, label: boundary.Label[(Message.FinalState, Option[Accounting.Job.Profile])]): ProcessUtil.MyProcess =
     try
       config.sudo match
         case None =>
@@ -149,25 +150,26 @@ object Compute:
     catch
       case e: Exception =>
         logger.info(s"${id}: error launching job execution $e")
-        boundary.break(Message.Failed(id, Tool.exceptionToString(e), Message.Failed.Reason.ExecutionFailed))
+        boundary.break((Message.Failed(id, Tool.exceptionToString(e), Message.Failed.Reason.ExecutionFailed), None))
 
 
   def run(
     minio: Minio,
     coordinationBucket: Minio.Bucket,
     job: SubmittedJob,
-    random: util.Random)(using config: ComputeConfig, fileCache: FileCache): Message.FinalState =
+    random: util.Random)(using config: ComputeConfig, fileCache: FileCache): (Message.FinalState, Option[Accounting.Job.Profile]) =
+
     createDirectories(job.id)
 
     try
-      boundary[Message.FinalState]:
+      boundary[(Message.FinalState, Option[Accounting.Job.Profile])]:
         logger.info(s"${job.id}: preparing files")
 
-        def testCanceled(): Unit =
+        def testCanceled(usage: Option[Accounting.Job.Profile]): Unit =
           if JobPull.canceled(minio, job.bucket, job.id)
-          then boundary.break(Message.Canceled(job.id, true))
+          then boundary.break((Message.Canceled(job.id, true), usage))
 
-        testCanceled()
+        testCanceled(None)
 
         val output = job.submitted.stdOut.map(p => (path = p, file = baseDirectory(job.id) / "__output__"))
         val error = job.submitted.stdErr.map(p => (path = p, file = baseDirectory(job.id) / "__error__"))
@@ -189,20 +191,22 @@ object Compute:
           catch
              case e: Exception =>
                uploadOutputError(Some(s"${job.id}: error preparing files $e"))
-               boundary.break(Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.PreparationFailed))
+               boundary.break:
+                 (Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.PreparationFailed), None)
 
 
-        val sampler = ReservoirSampler(100, random.nextLong())
+        val sampler = ReservoirSampler(100, random.nextLong(), System.currentTimeMillis())
 
         try
-          testCanceled()
+          testCanceled(None)
 
           val exit =
             logger.info(s"${job.id}: run ${job.submitted.command}")
 
             val process = createProcess(job.id, job.submitted.command, output.map(_.file), error.map(_.file))
 
-            val samplerCron = tool.Cron.seconds(10, initialSchedule = true)(() => sampler.sample(process.pid, config.sudo, jobDirectory(job.id)))
+            val samplerCron =
+              tool.Cron.seconds(10, initialSchedule = true)(() => sampler.sample(process.pid, config.sudo, jobDirectory(job.id)))
 
             try
               while process.isAlive
@@ -212,12 +216,14 @@ object Compute:
                   process.dispose()
                   def message = s"Max requested CPU time for the job has been exhausted"
                   uploadOutputError(Some(s"${job.id}: $message"))
-                  boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted))
+                  boundary.break:
+                    (Message.Failed(job.id, message, Message.Failed.Reason.TimeExhausted), Some(sampler.sampled))
 
                 if JobPull.canceled(minio, job.bucket, job.id)
                 then
                   process.dispose()
-                  boundary.break(Message.Canceled(job.id, true))
+                  boundary.break:
+                    (Message.Canceled(job.id, true), Some(sampler.sampled))
 
                 Thread.sleep(10000)
               end while
@@ -232,13 +238,14 @@ object Compute:
 
           logger.info(s"${job.id}: process ended")
 
-          testCanceled()
+          testCanceled(Some(sampler.sampled))
 
           if exit != 0
           then
             def message = s"Return exit code of execution was not 0 but ${exit}"
             uploadOutputError(Some(s"${job.id}: $message"))
-            boundary.break(Message.Failed(job.id, message, Message.Failed.Reason.ExecutionFailed))
+            boundary.break:
+              (Message.Failed(job.id, message, Message.Failed.Reason.ExecutionFailed), Some(sampler.sampled))
 
         finally usedCache.foreach(FileCache.release(fileCache, _))
 
@@ -248,13 +255,14 @@ object Compute:
         catch
           case e: Exception =>
             uploadOutputError(Some(s"${job.id}: error completing the job $e"))
-            boundary.break(Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.CompletionFailed))
+            boundary.break:
+              (Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.CompletionFailed), Some(sampler.sampled))
 
         uploadOutputError(None)
-        Message.Completed(job.id)
+        (Message.Completed(job.id), Some(sampler.sampled))
 
     catch
-      case e: Exception => Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError)
+      case e: Exception => (Message.Failed(job.id, Tool.exceptionToString(e), Message.Failed.Reason.UnexpectedError), None)
     finally
       Compute.moveBaseDirecotryToTrash(job.id)
 
@@ -470,10 +478,11 @@ object ProcessUtil:
 
 class ReservoirSampler(
   size: Int,
-  seed: Long):
+  seed: Long,
+  start: Long):
 
-  private val times: Array[Long] = Array.fill(size)(-1L)
-  private val samples: Array[(memory: Long, disk: Long, cpu: Double)] = Array.fill(size)(null)
+  private val times: Array[Int] = Array.fill(size)(-1)
+  private val samples: Array[(memory: Int, disk: Int, cpu: Float)] = Array.fill(size)(null)
   private lazy val random = util.Random(seed)
   private var nbSampled = 0
 
@@ -483,10 +492,10 @@ class ReservoirSampler(
         mem <- ProcessUtil.memory(pid)
         disk <- ProcessUtil.diskUsage(directory, user)
         cpu <- ProcessUtil.cpuUsage(pid)
-      yield (memory = mem, disk = disk, cpu = cpu)
+      yield (memory = (mem / 1024).toInt, disk = (disk / 1024).toInt, cpu = cpu.toFloat)
 
     s.foreach: s =>
-      val time = System.currentTimeMillis()
+      val time = (System.currentTimeMillis() - start).toInt / 60
       val index =
         if nbSampled < size
         then nbSampled
@@ -497,5 +506,12 @@ class ReservoirSampler(
       nbSampled += 1
 
   def sampled = synchronized:
-    (times zip samples).take(nbSampled).sortBy(_._1)
+    val data = (times zip samples).take(nbSampled).sortBy(_._1)
+    MiniClust.Accounting.Job.Profile(
+      time = data.map(_._1),
+      cpu = data.map(_._2.cpu),
+      memory = data.map(_._2.memory),
+      disk = data.map(_._2.disk)
+    )
+
 

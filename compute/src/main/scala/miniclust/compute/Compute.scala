@@ -495,7 +495,7 @@ class ReservoirSampler(
       yield (memory = (mem / 1024).toInt, disk = (disk / 1024).toInt, cpu = cpu.toFloat)
 
     s.foreach: s =>
-      val time = (System.currentTimeMillis() - start).toInt / 60
+      val time = (System.currentTimeMillis() - start).toInt / 1000
       val index =
         if nbSampled < size
         then nbSampled

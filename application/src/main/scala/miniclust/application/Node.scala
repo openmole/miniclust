@@ -204,7 +204,8 @@ def loadConfiguration(configurationFile: File) =
                   val seed = c.random.nextLong()
 
                   Background.run:
-                    JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, heartBeat, util.Random(seed))
+                    try JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, util.Random(seed))
+                    finally heartBeat.stop()
 
                   morePullers()
                 case PulledJob.Invalid => morePullers()

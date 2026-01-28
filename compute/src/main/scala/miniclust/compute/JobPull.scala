@@ -311,7 +311,7 @@ object JobPull:
       case NotSelected.NotFound => PulledJob.NotFound
       case NotSelected.NotEnoughResource => PulledJob.NotEnoughResource
 
-  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, heartBeat: Cron.StopTask, random: util.Random)(using Compute.ComputeConfig, FileCache) =
+  def executeJob(minio: Minio, coordinationBucket: Minio.Bucket, job: SubmittedJob, accounting: UsageHistory, nodeInfo: MiniClust.NodeInfo, random: util.Random)(using Compute.ComputeConfig, FileCache) =
     val start = Instant.now()
     try
       logger.info(s"${job.id}: running")
@@ -332,5 +332,4 @@ object JobPull:
         MiniClust.Accounting.Job.publish(minio, coordinationBucket, jobAccounting)
     finally
       ComputingResource.dispose(job.allocated)
-      heartBeat.stop()
       JobPull.clearCheckIn(minio, coordinationBucket, job)

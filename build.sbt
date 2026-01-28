@@ -109,7 +109,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
   Docker / organization := "openmole",
   dockerUpdateLatest := true,
   dockerBaseImage := "eclipse-temurin:25",
-  Universal / javaOptions ++= Seq("-J-Xmx400m"),
+  Universal / javaOptions ++= Seq("-J-Xmx500m"),
 )
 
 ThisBuild / licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/"))

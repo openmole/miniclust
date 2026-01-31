@@ -31,19 +31,20 @@ object Service:
   val logger = Logger.getLogger(getClass.getName)
 
   def startBackgroud(
-                      minio: Minio,
-                      coordinationBucket: Minio.Bucket,
-                      fileCache: FileCache,
-                      nodeInfo: NodeInfo,
-                      miniclust: Accounting.Worker.MiniClust,
-                      resource: ComputingResource,
-                      trashDirectory: File,
-                      random: Random) =
+    minio: Minio,
+    coordinationBucket: Minio.Bucket,
+    fileCache: FileCache,
+    nodeInfo: NodeInfo,
+    miniclust: Accounting.Worker.MiniClust,
+    resource: ComputingResource,
+    trashDirectory: File,
+    random: Random) =
+    val longMinio = Minio.withTimeout(minio, 5 * 60)
     val removeRandom = Random(random.nextLong)
 
     val s1 =
       Cron.seconds(24 * 60 * 60, startDelay = Some(random.nextInt(24 * 60 * 60))): () =>
-        removeOldData(minio, coordinationBucket, removeRandom)
+        removeOldData(longMinio, coordinationBucket, removeRandom)
 
     val s2 =
       Cron.seconds(60): () =>
@@ -75,11 +76,11 @@ object Service:
 
     val s7 =
       Cron.seconds(60 * 60, startDelay = Some(random.nextInt(60 * 60))): () =>
-        removeOldAccounting(minio, coordinationBucket)
+        removeOldAccounting(longMinio, coordinationBucket)
 
     val s8 =
       Cron.seconds(60 * 60, startDelay = Some(random.nextInt(60 * 60))): () =>
-        removeOldCancel(minio, coordinationBucket, removeRandom)
+        removeOldCancel(longMinio, coordinationBucket, removeRandom)
 
 
     StopTask.combine(s1, s2, s3, s4, s6, s7, s8)

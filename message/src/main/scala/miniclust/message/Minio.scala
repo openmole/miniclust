@@ -49,6 +49,9 @@ import java.util.zip.GZIPInputStream
 object Minio:
   def jsonContentType = "application/json"
 
+  def withTimeout(minio: Minio, timeout: Int) =
+    minio.copy(server = minio.server.copy(timeout = timeout))
+
   case class Server(url: String, user: String, password: String, timeout: Int = 30, retry: Int = 3, insecure: Boolean = false)
   case class Bucket(name: String)
 

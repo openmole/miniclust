@@ -39,7 +39,7 @@ object Service:
     resource: ComputingResource,
     trashDirectory: File,
     random: Random) =
-    val longMinio = Minio.withTimeout(minio, 5 * 60)
+    val longMinio = Minio.withTimeout(minio, 60)
     val removeRandom = Random(random.nextLong)
 
     val s1 =
@@ -105,9 +105,11 @@ object Service:
 
   def removeOldAccounting(minio: Minio, coordinationBucket: Minio.Bucket) =
     val date = Minio.date(minio)
-    val old = 7 * 60 * 60 * 24
-    removeOld(minio, coordinationBucket, MiniClust.Coordination.jobAccountingDirectory + "/", date, old)
-    removeOld(minio, coordinationBucket, MiniClust.Coordination.workerAccountingDirectory + "/", date, old)
+    val nodeActivityRetention = 7 * 60 * 60 * 24
+    val jobActivityRetention = 1 * 60 * 60 * 24
+
+    removeOld(minio, coordinationBucket, MiniClust.Coordination.jobAccountingDirectory + "/", date, jobActivityRetention)
+    removeOld(minio, coordinationBucket, MiniClust.Coordination.workerAccountingDirectory + "/", date, nodeActivityRetention)
 
   def removeOldCancel(minio: Minio, coordinationBucket: Minio.Bucket, random: Random) =
     val old = 60 * 60

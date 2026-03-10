@@ -1,6 +1,6 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.7.2"
+val scala3Version = "3.8.2"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"
@@ -36,12 +36,12 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
-    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.38.5",
-    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.38.5",
-    libraryDependencies += "commons-codec" % "commons-codec" % "1.20.0",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.42.9",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.42.9",
+    libraryDependencies += "commons-codec" % "commons-codec" % "1.21.0",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
-    libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.3",
+    libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.4",
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
   )
   .enablePlugins(BuildInfoPlugin)
@@ -64,7 +64,7 @@ lazy val documentation = project
       "SCALA_VERSION" -> scalaVersion.value,
     ),
     libraryDependencies += "com.softwaremill.sttp.apispec" %% "jsonschema-circe" % "0.11.10",
-    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.12.2"
+    libraryDependencies += "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % "1.13.9"
   ) dependsOn message
 
 //val prefix = "/opt/docker/application/"

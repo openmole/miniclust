@@ -47,7 +47,7 @@ object Node:
       if elapsed < seconds then Thread.sleep((seconds - elapsed) * 1000)
 
 def loadConfiguration(configurationFile: File) =
-  val overprovision =  1.1
+  val overprovision =  1.0
   val configuration = Configuration.read(configurationFile)
 
   val cores = configuration.compute.cores.getOrElse((Runtime.getRuntime.availableProcessors() * overprovision).toInt)

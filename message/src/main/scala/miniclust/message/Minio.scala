@@ -52,7 +52,7 @@ object Minio:
   def withTimeout(minio: Minio, timeout: Int) =
     minio.copy(server = minio.server.copy(timeout = timeout))
 
-  case class Server(url: String, user: String, password: String, timeout: Int = 30, retry: Int = 3, insecure: Boolean = false)
+  case class Server(url: String, user: String, password: String, timeout: Int = 60, retry: Int = 3, insecure: Boolean = false)
   case class Bucket(name: String)
 
   def apply(server: Server) =

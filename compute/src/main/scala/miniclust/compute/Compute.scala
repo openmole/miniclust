@@ -26,6 +26,7 @@ import gears.async.default.given
 import miniclust.compute.JobPull.SubmittedJob
 import miniclust.message.Message.InputFile.Extraction
 import miniclust.compute.tool.Background
+
 import java.io.PrintStream
 import java.security.InvalidParameterException
 import scala.util.{Failure, Success, boundary}
@@ -34,6 +35,8 @@ import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.ExecutorService
 import MiniClust.Accounting
+
+import squants.information.*
 
 object Compute:
   val logger = Logger.getLogger(getClass.getName)
@@ -364,7 +367,7 @@ object ProcessUtil:
     import scala.util.*
     Try:
       val res = sudo(user)(s"""du -ks ${f.pathAsString}""").!!.trim.takeWhile(_.isDigit)
-      res.toLong
+      Kilobytes(res.toLong)
 
   // In KB
   def memory(pid: Long) =
@@ -405,7 +408,7 @@ object ProcessUtil:
 
     Try:
       val res = Seq("bash", "-c", script, "--", s"$pid").!!.trim
-      res.toLong
+      Kilobytes(res.toLong)
 
   def cpuUsage(pid: Long, sleep: Int = 1): util.Try[Double] =
     import scala.sys.process.*
@@ -492,7 +495,7 @@ class ReservoirSampler(
         mem <- ProcessUtil.memory(pid)
         disk <- ProcessUtil.diskUsage(directory, user)
         cpu <- ProcessUtil.cpuUsage(pid)
-      yield (memory = (mem / 1024).toInt, disk = (disk / 1024).toInt, cpu = cpu.toFloat)
+      yield (memory = mem.toMegabytes.intValue, disk = disk.toMegabytes.intValue, cpu = cpu.toFloat)
 
     s.foreach: s =>
       val time = (System.currentTimeMillis() - start).toInt / 1000

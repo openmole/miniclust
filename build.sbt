@@ -39,6 +39,7 @@ lazy val message = project
     libraryDependencies += "software.amazon.awssdk" % "s3" % "2.42.9",
     libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.42.9",
     libraryDependencies += "commons-codec" % "commons-codec" % "1.21.0",
+    libraryDependencies += "org.typelevel"  %% "squants"  % "1.8.3",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,
     libraryDependencies += "com.github.f4b6a3" % "ulid-creator" % "5.2.4",

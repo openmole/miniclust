@@ -70,7 +70,7 @@ object MiniClust:
     given derivation.Configuration = Tool.jsonConfiguration
     given Codec[NodeInfo] = derivation.ConfiguredCodec.derived
 
-    def apply(key: String, hostname: Option[String], id: String, cores: Int, machineCores: Int, space: Long, memory: Long) =
+    def apply(key: String, hostname: Option[String], id: String, cores: Int, machineCores: Int, space: Long, memory: Long, machineMemory: Long) =
       new NodeInfo(
         ip = Tool.queryExternalIP.getOrElse("NA"),
         id = id,
@@ -79,7 +79,8 @@ object MiniClust:
         cores = cores,
         machineCores = machineCores,
         space = space,
-        memory = memory
+        memory = memory,
+        machineMemory = machineMemory
       )
 
   case class NodeInfo(
@@ -90,7 +91,8 @@ object MiniClust:
     cores: Int,
     machineCores: Int,
     space: Long,
-    memory: Long)
+    memory: Long,
+    machineMemory: Long)
 
   object Accounting:
     object Job:

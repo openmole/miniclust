@@ -89,6 +89,7 @@ object Message:
   enum Resource derives derivation.ConfiguredCodec:
     case Core(core: Int)
     case MaxTime(second: Int)
+    case Memory(megabyte: Int)
 
 
 sealed trait Message

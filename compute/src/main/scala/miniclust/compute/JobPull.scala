@@ -11,6 +11,7 @@ import gears.async.*
 import gears.async.default.given
 import miniclust.compute.JobPull.RunningJob.{name, path}
 import miniclust.compute.tool.{Background, Cron, IdleBucketList, TimeCache, UsageHistory}
+import squants.information.Information
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -46,6 +47,7 @@ object JobPull:
   def state(
     minio: Minio,
     cores: Int,
+    memoryPerCore: Information,
     maxCPU: Option[Int],
     maxMemory: Option[Int],
     history: Int,
@@ -56,7 +58,7 @@ object JobPull:
     val ignoreList = IdleBucketList(ignoreAfter = ignoreAfter, checkAfter = checkAfter, initialBuckets = buckets.map(_.name))
 
     State(
-      ComputingResource(cores, maxCPU = maxCPU, maxMemory = maxMemory),
+      ComputingResource(cores, memoryPerCore = memoryPerCore, maxCPU = maxCPU, maxMemory = maxMemory),
       UsageHistory(history),
       ignoreList,
       TimeCache(bucketCache)

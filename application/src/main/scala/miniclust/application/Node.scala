@@ -18,6 +18,8 @@ import scala.util.Random
 import scala.util.hashing.MurmurHash3
 import scala.jdk.CollectionConverters.*
 
+import squants.information.*
+
 /*
  * Copyright (C) 2025 Romain Reuillon
  *
@@ -90,8 +92,10 @@ def loadConfiguration(configurationFile: File) =
       insecure = configuration.minio.insecure)
 
   val space = miniclust.message.Tool.diskUsage(baseDirectory.toJava).total
-  val memory = miniclust.message.Tool.totalMemory
+  val totalMemory = miniclust.message.Tool.totalMemory
   val machineCores = miniclust.message.Tool.machineCores
+  val memory = configuration.compute.memory.map(Megabytes.apply).getOrElse(totalMemory)
+  val memoryPerCore = memory.map(_ / machineCores)
 
   val nodeInfo =
     MiniClust.NodeInfo(
@@ -100,8 +104,9 @@ def loadConfiguration(configurationFile: File) =
       id,
       cores = cores,
       machineCores = machineCores,
-      space = space,
-      memory = memory)
+      space = space.toMegabytes.longValue,
+      memory = memory.toMegabytes.longValue,
+      machineMemory = totalMemory.toMegabytes.longValue)
 
   val minio = Minio(server)
   val coordinationBucket = Minio.bucket(minio, MiniClust.Coordination.bucketName)
@@ -112,6 +117,7 @@ def loadConfiguration(configurationFile: File) =
   (
     configuration = configuration,
     cores = cores,
+    memoryPerCore = memoryPerCore,
     miniclustInfo = miniclustInfo,
     baseDirectory = baseDirectory,
     fileCache = fileCache,
@@ -147,6 +153,7 @@ def loadConfiguration(configurationFile: File) =
       val pullState = JobPull.state(
         minio = c.minio,
         cores = c.cores,
+        memoryPerCore = c.memoryPerCore,
         history = 48,
         ignoreAfter = 600,
         checkAfter = 60,

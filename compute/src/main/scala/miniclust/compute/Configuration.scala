@@ -42,6 +42,7 @@ object Configuration:
     user: Option[String],
     sudo: Option[String],
     cores: Option[Int],
+    memory: Option[Long] = None,
     maxCPULoad: Option[Int] = Some(500),
     maxMemory: Option[Int] = Some(95)) derives derivation.ConfiguredCodec
 

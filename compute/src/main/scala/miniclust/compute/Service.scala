@@ -58,8 +58,8 @@ object Service:
       Cron.seconds(60): () =>
         val usage = MiniClust.Accounting.Worker.Usage(
           cores = nodeInfo.cores - ComputingResource.freeCore(resource),
-          availableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable,
-          availableMemory = Tool.availableMemory,
+          availableSpace = Tool.diskUsage(fileCache.fileFolder.toJava).usable.toMegabytes.longValue,
+          availableMemory = Tool.availableMemory.toMegabytes.longValue,
           load = Tool.machineLoad
         )
         val currentActivity = MiniClust.Accounting.Worker(nodeInfo, miniclust, usage)

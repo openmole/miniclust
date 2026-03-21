@@ -26,6 +26,8 @@ import java.io.*
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
 
+import squants.information.*
+
 object Tool:
 
   def hashString(input: String): String =
@@ -92,19 +94,19 @@ object Tool:
     sw.toString
 
   def diskUsage(file: File) =
-    val totalSpace = file.getTotalSpace
-    val usableSpace = file.getUsableSpace
+    val totalSpace = Bytes(file.getTotalSpace)
+    val usableSpace = Bytes(file.getUsableSpace)
     (total = totalSpace, usable = usableSpace)
 
-  def totalMemory =
+  def totalMemory: Information =
    val script  ="""awk '/MemTotal/ {print $2}' /proc/meminfo"""
    import scala.sys.process.*
-   Seq("bash", "-c", script).!!.trim.toLong
+   Kilobytes(Seq("bash", "-c", script).!!.trim.toLong)
 
-  def availableMemory =
+  def availableMemory: Information =
     val script = """awk '/MemAvailable/ {print $2}' /proc/meminfo"""
     import scala.sys.process.*
-    Seq("bash", "-c", script).!!.trim.toLong
+    Kilobytes(Seq("bash", "-c", script).!!.trim.toLong)
 
   def machineCores =
     val script = """nproc"""

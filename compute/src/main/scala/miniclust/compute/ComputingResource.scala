@@ -5,6 +5,8 @@ import miniclust.compute.Compute.getClass
 import java.time.Instant
 import java.util.logging.Logger
 
+import squants.information.*
+
 /*
  * Copyright (C) 2025 Romain Reuillon
  *
@@ -26,7 +28,8 @@ object ComputingResource:
 
   val logger = Logger.getLogger(getClass.getName)
 
-  def apply(core: Int, maxCPU: Option[Int], maxMemory: Option[Int]) = new ComputingResource(core, 3600, maxCPU, maxMemory)
+  def apply(core: Int, memoryPerCore: Information, maxCPU: Option[Int], maxMemory: Option[Int]) =
+    new ComputingResource(core, memoryPerCore, 3600, maxCPU, maxMemory)
 
   case class Allocated(pool: ComputingResource, core: Int, deadLine: Long, time: Long)
 
@@ -79,5 +82,5 @@ object ComputingResource:
     (cpu = res(0).toDouble, mem = res(1).toInt)
 
 
-case class ComputingResource(private var core: Int, defaultTime: Int, maxCPULoad: Option[Int], maxMemory: Option[Int])
+case class ComputingResource(private var core: Int, memoryPerCore: Information, defaultTime: Int, maxCPULoad: Option[Int], maxMemory: Option[Int])
 

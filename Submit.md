@@ -3,7 +3,7 @@
 ## Using the Scala client
 
 ```scala
-//> using scala "3.7.0"
+//> using scala "3.8.2"
 //> using dep "org.openmole.miniclust::submit:1.2-SNAPSHOT" 
 //> using repository "https://oss.sonatype.org/content/repositories/snapshots/"
 

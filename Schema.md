@@ -3,7 +3,7 @@
 If you which to generate a client in your language, the JSON schema of the message that you can exchange with MiniClust is:
 ```json
 {
-  "$schema" : "http://json-schema.org/draft/2020-12/schema#",
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
   "$defs" : {
     "Canceled" : {
       "title" : "Canceled",

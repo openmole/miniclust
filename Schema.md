@@ -267,6 +267,9 @@ If you which to generate a client in your language, the JSON schema of the messa
         },
         {
           "$ref" : "#/$defs/MaxTime"
+        },
+        {
+          "$ref" : "#/$defs/Memory"
         }
       ]
     },
@@ -291,6 +294,19 @@ If you which to generate a client in your language, the JSON schema of the messa
       ],
       "properties" : {
         "second" : {
+          "type" : "integer",
+          "format" : "int32"
+        }
+      }
+    },
+    "Memory" : {
+      "title" : "Memory",
+      "type" : "object",
+      "required" : [
+        "size"
+      ],
+      "properties" : {
+        "size" : {
           "type" : "integer",
           "format" : "int32"
         }

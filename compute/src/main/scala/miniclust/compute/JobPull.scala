@@ -19,6 +19,7 @@ import scala.util.control.Breaks
 
 
 import squants.information.*
+import squants.time.*
 
 
 /*
@@ -191,7 +192,7 @@ object JobPull:
           validate(minio, bucket, id) match
             case Success(s) =>
               val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
-              val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
+              val time = s.resource.collectFirst { case r: Resource.MaxTime => Seconds(r.second) }
               val memory = s.resource.collectFirst { case r: Resource.Memory => Megabytes(r.megabyte) }
               ComputingResource.request(state.computingResource, cores, time, memory, state.computingResource.memoryPerCore) match
                 case Some(r) => SubmittedJob(bucket, id, s, r)

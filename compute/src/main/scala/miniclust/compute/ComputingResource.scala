@@ -6,6 +6,7 @@ import java.time.Instant
 import java.util.logging.Logger
 
 import squants.information.*
+import squants.time.*
 
 /*
  * Copyright (C) 2025 Romain Reuillon
@@ -29,15 +30,15 @@ object ComputingResource:
   val logger = Logger.getLogger(getClass.getName)
 
   def apply(core: Int, memoryPerCore: Information, maxCPU: Option[Int], maxMemory: Option[Int]) =
-    new ComputingResource(core, memoryPerCore, 3600, maxCPU, maxMemory)
+    new ComputingResource(core, memoryPerCore, Hours(1), maxCPU, maxMemory)
 
-  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long, time: Long)
+  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long, time: Time)
 
   def dispose(a: Allocated): Unit =
     a.pool.synchronized:
       a.pool.core += a.core
 
-  def request(pool: ComputingResource, core: Int, time: Option[Int], memory: Option[Information], memoryPerCore: Information) =
+  def request(pool: ComputingResource, core: Int, time: Option[Time], memory: Option[Information], memoryPerCore: Information) =
     pool.synchronized:
       val usage = machineUsage
       val memoryCoreRequest =
@@ -59,7 +60,7 @@ object ComputingResource:
         if coreRequest >= 1 && pool.core >= coreRequest
         then
           pool.core -= coreRequest
-          Some(Allocated(pool, coreRequest, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime), time.getOrElse(pool.defaultTime)))
+          Some(Allocated(pool, coreRequest, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime).toSeconds.toLong, time.getOrElse(pool.defaultTime)))
         else None
 
   def freeCore(pool: ComputingResource) =
@@ -87,5 +88,5 @@ object ComputingResource:
     (cpu = res(0).toDouble, mem = res(1).toInt)
 
 
-case class ComputingResource(private var core: Int, memoryPerCore: Information, defaultTime: Int, maxCPULoad: Option[Int], maxMemory: Option[Int])
+case class ComputingResource(private var core: Int, memoryPerCore: Information, defaultTime: Time, maxCPULoad: Option[Int], maxMemory: Option[Int])
 

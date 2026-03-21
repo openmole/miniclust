@@ -18,6 +18,9 @@ import scala.collection.mutable.ListBuffer
 import scala.util.control.Breaks
 
 
+import squants.information.*
+
+
 /*
  * Copyright (C) 2025 Romain Reuillon
  *
@@ -189,7 +192,8 @@ object JobPull:
             case Success(s) =>
               val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
               val time = s.resource.collectFirst { case r: Resource.MaxTime => r.second }
-              ComputingResource.request(state.computingResource, cores, time) match
+              val memory = s.resource.collectFirst { case r: Resource.Memory => Megabytes(r.megabyte) }
+              ComputingResource.request(state.computingResource, cores, time, memory, state.computingResource.memoryPerCore) match
                 case Some(r) => SubmittedJob(bucket, id, s, r)
                 case None => NotSelected.NotEnoughResource
             case Failure(e: FileNotFoundException) => NotSelected.JobRemoved

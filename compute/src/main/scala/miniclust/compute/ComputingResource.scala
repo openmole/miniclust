@@ -37,9 +37,14 @@ object ComputingResource:
     a.pool.synchronized:
       a.pool.core += a.core
 
-  def request(pool: ComputingResource, core: Int, time: Option[Int]) =
+  def request(pool: ComputingResource, core: Int, time: Option[Int], memory: Option[Information], memoryPerCore: Information) =
     pool.synchronized:
       val usage = machineUsage
+      val memoryCoreRequest =
+        memory.map: m =>
+          (m / memoryPerCore).ceil.toInt
+
+      val coreRequest  = Math.max(core, memoryCoreRequest.getOrElse(0))
 
       val overloaded =
         val cpuOverloaded = pool.maxCPULoad.map(usage.cpu > _).getOrElse(false)
@@ -51,10 +56,10 @@ object ComputingResource:
         logger.info(s"Machine overloaded: cpu ${usage.cpu}, mem ${usage.mem} (limits ${pool.maxCPULoad}, ${pool.maxMemory})")
         None
       else
-        if core >= 1 && pool.core >= core
+        if coreRequest >= 1 && pool.core >= coreRequest
         then
-          pool.core -= core
-          Some(Allocated(pool, core, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime), time.getOrElse(pool.defaultTime)))
+          pool.core -= coreRequest
+          Some(Allocated(pool, coreRequest, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime), time.getOrElse(pool.defaultTime)))
         else None
 
   def freeCore(pool: ComputingResource) =

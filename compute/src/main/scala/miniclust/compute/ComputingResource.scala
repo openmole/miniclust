@@ -38,12 +38,12 @@ object ComputingResource:
     a.pool.synchronized:
       a.pool.core += a.core
 
-  def request(pool: ComputingResource, core: Int, time: Option[Time], memory: Option[Information], memoryPerCore: Information) =
+  def request(pool: ComputingResource, core: Int, time: Option[Time], memory: Option[Information]) =
     pool.synchronized:
       val usage = machineUsage
       val memoryCoreRequest =
         memory.map: m =>
-          (m / memoryPerCore).ceil.toInt
+          (m / pool.memoryPerCore).ceil.toInt
 
       val coreRequest  = Math.max(core, memoryCoreRequest.getOrElse(0))
 

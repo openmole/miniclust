@@ -194,7 +194,7 @@ object JobPull:
               val cores = s.resource.collectFirst { case r: Resource.Core => r.core }.getOrElse(1)
               val time = s.resource.collectFirst { case r: Resource.MaxTime => Seconds(r.second) }
               val memory = s.resource.collectFirst { case r: Resource.Memory => Megabytes(r.size) }
-              ComputingResource.request(state.computingResource, cores, time, memory, state.computingResource.memoryPerCore) match
+              ComputingResource.request(state.computingResource, cores, time, memory) match
                 case Some(r) => SubmittedJob(bucket, id, s, r)
                 case None => NotSelected.NotEnoughResource
             case Failure(e: FileNotFoundException) => NotSelected.JobRemoved

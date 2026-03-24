@@ -29,38 +29,38 @@ object ComputingResource:
 
   val logger = Logger.getLogger(getClass.getName)
 
-  def apply(core: Int, memoryPerCore: Information, maxCPU: Option[Int], maxMemory: Option[Int]) =
-    new ComputingResource(core, memoryPerCore, Hours(1), maxCPU, maxMemory)
+  def apply(core: Int) =
+    new ComputingResource(core)
 
-  case class Allocated(pool: ComputingResource, core: Int, deadLine: Long, time: Time)
+  case class Allocated(core: Int, deadLine: Long, time: Time)
 
-  def dispose(a: Allocated): Unit =
-    a.pool.synchronized:
-      a.pool.core += a.core
+  def dispose(a: Allocated, pool: ComputingResource): Unit =
+    pool.synchronized:
+      pool.core += a.core
 
-  def request(pool: ComputingResource, core: Int, time: Option[Time], memory: Option[Information]) =
+  def request(pool: ComputingResource, core: Int, time: Option[Time], memory: Option[Information])(using context: ComputingContext) =
     pool.synchronized:
       val usage = machineUsage
       val memoryCoreRequest =
         memory.map: m =>
-          (m / pool.memoryPerCore).ceil.toInt
+          (m / context.memoryPerCore).ceil.toInt
 
       val coreRequest  = Math.max(core, memoryCoreRequest.getOrElse(0))
 
       val overloaded =
-        val cpuOverloaded = pool.maxCPULoad.map(usage.cpu > _).getOrElse(false)
-        val memOverloaded = pool.maxMemory.map(usage.mem > _).getOrElse(false)
+        val cpuOverloaded = context.maxCPULoad.map(usage.cpu > _).getOrElse(false)
+        val memOverloaded = context.maxMemory.map(usage.mem > _).getOrElse(false)
         cpuOverloaded || memOverloaded
 
       if overloaded
       then
-        logger.info(s"Machine overloaded: cpu ${usage.cpu}, mem ${usage.mem} (limits ${pool.maxCPULoad}, ${pool.maxMemory})")
+        logger.info(s"Machine overloaded: cpu ${usage.cpu}, mem ${usage.mem} (limits ${context.maxCPULoad}, ${context.maxMemory})")
         None
       else
         if coreRequest >= 1 && pool.core >= coreRequest
         then
           pool.core -= coreRequest
-          Some(Allocated(pool, coreRequest, Instant.now().getEpochSecond + time.getOrElse(pool.defaultTime).toSeconds.toLong, time.getOrElse(pool.defaultTime)))
+          Some(Allocated(coreRequest, Instant.now().getEpochSecond + time.getOrElse(context.defaultTime).toSeconds.toLong, time.getOrElse(context.defaultTime)))
         else None
 
   def freeCore(pool: ComputingResource) =
@@ -88,5 +88,14 @@ object ComputingResource:
     (cpu = res(0).toDouble, mem = res(1).toInt)
 
 
-case class ComputingResource(private var core: Int, memoryPerCore: Information, defaultTime: Time, maxCPULoad: Option[Int], maxMemory: Option[Int])
+case class ComputingResource(private var core: Int)
 
+object ComputingContext:
+  def apply(memoryPerCore: Information, maxCPU: Option[Int], maxMemory: Option[Int], defaultTime: Time = Hours(1)) =
+    new ComputingContext(memoryPerCore, defaultTime, maxCPU, maxMemory)
+
+case class ComputingContext(
+  memoryPerCore: Information,
+  defaultTime: Time,
+  maxCPULoad: Option[Int],
+  maxMemory: Option[Int])

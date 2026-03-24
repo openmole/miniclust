@@ -150,15 +150,17 @@ def loadConfiguration(configurationFile: File) =
 
       given FileCache = c.fileCache
 
+      given ComputingContext = ComputingContext(
+        memoryPerCore = c.memoryPerCore,
+        maxCPU = c.configuration.compute.maxCPULoad,
+        maxMemory = c.configuration.compute.maxMemory)
+
       val pullState = JobPull.state(
         minio = c.minio,
         cores = c.cores,
-        memoryPerCore = c.memoryPerCore,
         history = 48,
         ignoreAfter = 600,
         checkAfter = 60,
-        maxCPU = c.configuration.compute.maxCPULoad,
-        maxMemory = c.configuration.compute.maxMemory,
         bucketCache = 60
       )
 
@@ -211,7 +213,7 @@ def loadConfiguration(configurationFile: File) =
                   val seed = c.random.nextLong()
 
                   Background.run:
-                    try JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState.usageHistory, c.nodeInfo, util.Random(seed))
+                    try JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState, c.nodeInfo, util.Random(seed))
                     finally heartBeat.stop()
 
                   morePullers()

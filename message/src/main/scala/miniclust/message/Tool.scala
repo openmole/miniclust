@@ -93,10 +93,12 @@ object Tool:
     e.printStackTrace(PrintWriter(sw))
     sw.toString
 
+  case class DiskUsage(total: Information, usable: Information)
+
   def diskUsage(file: File) =
     val totalSpace = Bytes(file.getTotalSpace)
     val usableSpace = Bytes(file.getUsableSpace)
-    (total = totalSpace, usable = usableSpace)
+    DiskUsage(total = totalSpace, usable = usableSpace)
 
   def totalMemory: Information =
    val script  ="""awk '/MemTotal/ {print $2}' /proc/meminfo"""

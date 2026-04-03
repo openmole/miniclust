@@ -1,6 +1,7 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.8.2"
+val scala3Version = "3.8.3"
+val scalaLTSVersion = "3.3.7"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"
@@ -36,6 +37,7 @@ lazy val message = project
   .in(file("message"))
   .settings(
     name := "message",
+    scalaVersion := scalaLTSVersion,
     libraryDependencies += "software.amazon.awssdk" % "s3" % "2.42.9",
     libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.42.9",
     libraryDependencies += "commons-codec" % "commons-codec" % "1.21.0",

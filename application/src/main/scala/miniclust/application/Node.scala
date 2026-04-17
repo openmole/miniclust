@@ -215,6 +215,7 @@ def loadConfiguration(configurationFile: File) =
                   Background.run:
                     try JobPull.executeJob(c.minio, c.coordinationBucket, job, pullState, c.nodeInfo, util.Random(seed))
                     finally heartBeat.stop()
+                    morePullers()
 
                   morePullers()
                 case PulledJob.Invalid => morePullers()

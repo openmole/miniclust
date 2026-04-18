@@ -146,7 +146,7 @@ object JobPull:
               then Double.PositiveInfinity
               else
                 val u = rnd.nextDouble()
-                -math.log(u) / w
+                -math.log(u) / math.pow(w, 3)
 
             (elem, key)
 

@@ -97,7 +97,8 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
             |echo "miniclust ALL=(job) NOPASSWD: ALL" > /etc/sudoers.d/miniclust_to_job && \
             |chmod 440 /etc/sudoers.d/miniclust_to_job && \
             |echo 'miniclust ALL=(root) NOPASSWD: /usr/bin/safe-wrapper *' > /etc/sudoers.d/miniclust_wrapper && \
-            |chmod 440 /etc/sudoers.d/miniclust_wrapper
+            |chmod 440 /etc/sudoers.d/miniclust_wrapper && \
+            |singularity config global -s "shared loop devices" yes
             |""".stripMargin),
           //Cmd("USER", "miniclust")
         ) ++ dockerCommands.value.drop(executionStageOffset)

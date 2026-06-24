@@ -85,11 +85,13 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
         Cmd("COPY", "safe-wrapper", "/usr/bin/safe-wrapper"),
         Cmd("RUN",
           """apt-get update && \
-            |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps gawk && \
-            |apt-get install -y singularity-container && \
+            |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps gawk wget e2fsprogs && \
+            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.1/apptainer_1.5.1-trixie+_amd64.deb && \
+            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.1/apptainer-suid_1.5.1-trixie+_amd64.deb && \
+            |apt install -y ./apptainer_1.5.1-trixie+_amd64.deb ./apptainer-suid_1.5.1-trixie+_amd64.deb && \
+            |rm *.deb && \
             |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
             |mkdir -p /lib/modules && \
-            |sed -i '/^sessiondir max size/c\sessiondir max size = 0' /etc/singularity/singularity.conf && \
             |useradd --system --create-home --uid 1001 miniclust && \
             |useradd --system --create-home --uid 1002 job && \
             |chmod 555 /usr/bin/safe-wrapper && \
@@ -98,6 +100,7 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
             |chmod 440 /etc/sudoers.d/miniclust_to_job && \
             |echo 'miniclust ALL=(root) NOPASSWD: /usr/bin/safe-wrapper *' > /etc/sudoers.d/miniclust_wrapper && \
             |chmod 440 /etc/sudoers.d/miniclust_wrapper && \
+            |singularity config global --set "sessiondir max size" 0 && \
             |singularity config global -s "shared loop devices" yes
             |""".stripMargin),
           //Cmd("USER", "miniclust")

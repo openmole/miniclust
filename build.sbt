@@ -1,7 +1,7 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.8.3"
-val scalaLTSVersion = "3.3.7"
+val scala3Version = "3.8.4"
+val scalaLTSVersion = "3.3.8"
 
 ThisBuild / version := "1.0-SNAPSHOT"
 ThisBuild / organization := "org.openmole.miniclust"
@@ -38,9 +38,9 @@ lazy val message = project
   .settings(
     name := "message",
     scalaVersion := scalaLTSVersion,
-    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.42.9",
-    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.42.9",
-    libraryDependencies += "commons-codec" % "commons-codec" % "1.21.0",
+    libraryDependencies += "software.amazon.awssdk" % "s3" % "2.46.17",
+    libraryDependencies += "software.amazon.awssdk" % "apache-client" % "2.46.17",
+    libraryDependencies += "commons-codec" % "commons-codec" % "1.22.0",
     libraryDependencies += "org.typelevel"  %% "squants"  % "1.8.3",
     libraryDependencies += "io.circe" %% "circe-generic" % circeVersion,
     libraryDependencies += "io.circe" %% "circe-parser" % circeVersion,

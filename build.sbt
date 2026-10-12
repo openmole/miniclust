@@ -86,9 +86,9 @@ lazy val application = project.in(file("application")) dependsOn(compute) enable
         Cmd("RUN",
           """apt-get update && \
             |apt-get install --no-install-recommends -y ca-certificates ca-certificates-java bash tar gzip locales sudo procps gawk wget e2fsprogs && \
-            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.1/apptainer_1.5.1-trixie+_amd64.deb && \
-            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.1/apptainer-suid_1.5.1-trixie+_amd64.deb && \
-            |apt install -y ./apptainer_1.5.1-trixie+_amd64.deb ./apptainer-suid_1.5.1-trixie+_amd64.deb && \
+            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.4/apptainer_1.5.4-trixie+_amd64.deb && \
+            |wget https://github.com/apptainer/apptainer/releases/download/v1.5.4/apptainer-suid_1.5.4-trixie+_amd64.deb && \
+            |apt install -y ./apptainer_1.5.4-trixie+_amd64.deb ./apptainer-suid_1.5.4-trixie+_amd64.deb && \
             |rm *.deb && \
             |apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/{apt,dpkg,cache,log}/ /var/lib/apt/lists/* && \
             |mkdir -p /lib/modules && \

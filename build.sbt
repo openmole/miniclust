@@ -1,6 +1,6 @@
 import com.typesafe.sbt.packager.docker.*
 
-val scala3Version = "3.8.4"
+val scala3Version = "3.9.0"
 val scalaLTSVersion = "3.3.8"
 
 ThisBuild / version := "1.0-SNAPSHOT"
